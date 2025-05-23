@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tutor AI - Visual STEM Problem Solver
+
+Tutor AI is an educational application that helps students understand and solve STEM problems through visual explanations. The application integrates Azure OpenAI for problem analysis and generates visual explanations of mathematical and scientific concepts.
+
+## Features
+
+- **File Upload**: Upload images or PDFs containing STEM problems
+- **Azure OpenAI Integration**: Analyze problems and generate step-by-step solutions
+- **Visual Explanations**: Create visual representations of solutions with mathematical notation
+- **Responsive UI**: Clean, intuitive interface for both desktop and mobile users
+
+## Tech Stack
+
+- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
+- **Backend**: 
+  - Next.js API routes for the main application
+  - Python Flask server for visualization rendering
+- **AI**: Azure OpenAI (GPT-4 Vision)
+- **Visualization**: HTML/CSS with MathJax for equations
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Node.js (v18 or later)
+- Python 3.8 or later
+- Azure OpenAI API key and endpoint
+
+### Environment Setup
+
+Create a `.env.local` file in the root directory with the following variables:
+
+```
+AZURE_OPENAI_API_KEY=your-api-key-here
+AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT_NAME=your-deployment-name
+AZURE_OPENAI_API_VERSION=2023-05-15
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository
+2. Install dependencies:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+```
 
-## Learn More
+3. Set up the Python backend:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cd python_backend
+chmod +x setup.sh
+./setup.sh
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Running the Application
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Use the start script to run both the Next.js frontend and Python backend:
 
-## Deploy on Vercel
+```bash
+./start.sh
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the application.
