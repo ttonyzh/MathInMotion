@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Call the Python backend to render the visualization
-    const response = await fetch('http://localhost:5001/render-manim', {
+    const response = await fetch('http://localhost:5002/render-manim', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -1,14 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import Header from "./components/layout/Header";
 import Footer from "./components/layout/Footer";
 import FileUpload from "./components/features/FileUpload";
 
+// Import the LoadingSpinner with client-side only rendering to prevent hydration errors
+const LoadingSpinner = dynamic(() => import('./components/ui/LoadingSpinner'), {
+  ssr: false,
+});
+
 export default function Home() {
+  // Use useState with undefined initial state to prevent hydration mismatch
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [solution, setSolution] = useState<string | null>(null);
+  
+  // Use client-side only rendering for the main UI
+  const [isMounted, setIsMounted] = useState(false);
+  
+  // This ensures the component is only fully rendered on the client
+  // which prevents hydration errors
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   
   // Handle file uploads
   const handleFileUpload = (file: File) => {
@@ -31,6 +47,7 @@ export default function Home() {
     setRenderError(null);
     
     try {
+      console.log('Sending Manim code to backend for rendering...');
       const response = await fetch('/api/render-manim', {
         method: 'POST',
         headers: {
@@ -40,10 +57,13 @@ export default function Home() {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to render visualization');
+        const errorText = await response.text();
+        console.error('Response not OK:', response.status, errorText);
+        throw new Error(`Failed to render visualization: ${response.status} ${errorText}`);
       }
       
       const data = await response.json();
+      console.log('Received data from backend:', data);
       
       if (data.success) {
         console.log('Render successful, content type:', data.contentType);
@@ -110,6 +130,12 @@ export default function Home() {
     }
   };
 
+  // Only render the full UI when mounted on the client
+  // This prevents hydration errors by ensuring the component renders the same content on server and client initially
+  if (!isMounted) {
+    return <div className="min-h-screen flex flex-col bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800"></div>;
+  }
+  
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
       <Header />
@@ -175,15 +201,7 @@ export default function Home() {
                       disabled={isLoading}
                       className={`w-full py-2 px-4 rounded-lg flex items-center justify-center ${isLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white font-medium transition-colors`}
                     >
-                      {isLoading ? (
-                        <>
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Processing...
-                        </>
-                      ) : 'Show Solution'}
+                      {isLoading ? <LoadingSpinner /> : 'Show Solution'}
                     </button>
                   </div>
                 ) : (
@@ -222,15 +240,7 @@ export default function Home() {
                                 disabled={isRenderingAnimation}
                                 className={`w-full py-2 px-4 rounded-lg flex items-center justify-center ${isRenderingAnimation ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} text-white font-medium transition-colors`}
                               >
-                                {isRenderingAnimation ? (
-                                  <>
-                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    Rendering Animation...
-                                  </>
-                                ) : 'Render Animation'}
+                                {isRenderingAnimation ? <LoadingSpinner text="Rendering Animation..." /> : 'Render Animation'}
                               </button>
                               {renderError && (
                                 <p className="mt-2 text-sm text-red-500">{renderError}</p>
