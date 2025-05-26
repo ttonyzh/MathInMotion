@@ -45,6 +45,7 @@ export default function Home() {
     
     setIsRenderingAnimation(true);
     setRenderError(null);
+    setAnimationUrl(null); // Clear any previous animation
     
     try {
       console.log('Sending Manim code to backend for rendering...');
@@ -59,30 +60,33 @@ export default function Home() {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Response not OK:', response.status, errorText);
-        throw new Error(`Failed to render visualization: ${response.status} ${errorText}`);
+        throw new Error(`Failed to render Manim animation: ${response.status} ${errorText}`);
       }
       
       const data = await response.json();
-      console.log('Received data from backend:', data);
+      console.log('Received response from Manim rendering server');
       
       if (data.success) {
-        console.log('Render successful, content type:', data.contentType);
-        // Check what type of content we're getting
-        if (data.contentType && data.contentType.includes('text/html')) {
-          // For HTML content
-          setAnimationUrl(`data:text/html;base64,${data.videoBase64}`);
-        } else if (data.contentType && data.contentType.includes('image')) {
-          // For image content
-          setAnimationUrl(`data:${data.contentType};base64,${data.videoBase64}`);
-        } else {
-          // Default to video/mp4 for backward compatibility
+        console.log('Manim rendering successful');
+        
+        // Check if we received a text fallback instead of a video
+        if (data.textFallback) {
+          console.log('Received text fallback instead of video');
+          setRenderError(data.message || 'Manim rendering is currently unavailable due to Cairo library dependency issues on macOS.');
+        }
+        // We're specifically using Manim for video now
+        else if (data.videoBase64) {
+          // Set the video data URL for the video element
           setAnimationUrl(`data:video/mp4;base64,${data.videoBase64}`);
+          console.log('Manim video loaded successfully');
+        } else {
+          throw new Error('No video data received from the server');
         }
       } else {
         throw new Error(data.error || 'Unknown error occurred');
       }
     } catch (error) {
-      console.error('Error rendering visualization:', error);
+      console.error('Error rendering Manim animation:', error);
       setRenderError(error instanceof Error ? error.message : 'An unknown error occurred');
     } finally {
       setIsRenderingAnimation(false);
@@ -117,8 +121,17 @@ export default function Home() {
       const data = await response.json();
       
       if (data.success) {
+        console.log('Received solution from API');
+        console.log('Received Manim code:', data.manimCode ? `${data.manimCode.substring(0, 100)}...` : 'None');
+        
         setSolution(data.solution);
         setManimCode(data.manimCode);
+        
+        if (data.manimCode) {
+          console.log('Manim code available, ready for rendering');
+        } else {
+          console.warn('No Manim code received from API');
+        }
       } else {
         throw new Error(data.error || 'Unknown error occurred');
       }
@@ -140,8 +153,93 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
       <Header />
 
-      {/* Hero Section */}
       <main className="flex-grow">
+        {/* Solution and Animation Section */}
+        {(solution || isRenderingAnimation) && (
+          <section className="bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6 mb-8 mx-4 sm:mx-10 lg:mx-auto max-w-6xl">
+            <h2 className="text-2xl font-semibold text-gray-800 dark:text-white mb-4">Solution</h2>
+            
+            {/* Solution Text */}
+            {solution && (
+              <div className="prose dark:prose-invert max-w-none mb-6">
+                <p className="whitespace-pre-wrap">{solution}</p>
+              </div>
+            )}
+            
+            {/* Animation Container */}
+            <div className="mt-6">
+              <h3 className="text-xl font-medium text-gray-700 dark:text-gray-300 mb-3">Visual Explanation</h3>
+              
+              {/* Loading State */}
+              {isRenderingAnimation && !animationUrl && (
+                <div className="flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+                  <p className="text-gray-600 dark:text-gray-300">Rendering animation...</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">This may take a moment</p>
+                </div>
+              )}
+              
+              {/* Video Player */}
+              {animationUrl && (
+                <div className="bg-black rounded-lg overflow-hidden">
+                  <video 
+                    className="w-full" 
+                    controls 
+                    autoPlay 
+                    loop
+                    playsInline
+                    onError={(e) => {
+                      console.error('Error loading video:', e);
+                      setRenderError('Failed to load the animation. Please try again.');
+                    }}
+                  >
+                    <source src={animationUrl} type="video/mp4" />
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
+              )}
+              
+              {/* Text Fallback Message */}
+              {!animationUrl && !isRenderingAnimation && renderError && renderError.includes('Cairo library dependency issues') && (
+                <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-6 whitespace-pre-wrap">
+                  <h4 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-3">Manim Rendering Unavailable</h4>
+                  <p className="text-gray-600 dark:text-gray-300">{renderError}</p>
+                  <div className="mt-4 p-4 bg-gray-200 dark:bg-gray-600 rounded overflow-auto">
+                    <pre className="text-xs text-gray-700 dark:text-gray-300">
+                      <code>{manimCode}</code>
+                    </pre>
+                  </div>
+                </div>
+              )}
+              
+              {/* Error Message */}
+              {renderError && (
+                <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <p className="text-red-600 dark:text-red-400">{renderError}</p>
+                  <button
+                    onClick={handleRenderAnimation}
+                    className="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                    disabled={isRenderingAnimation}
+                  >
+                    {isRenderingAnimation ? 'Rendering...' : 'Try Again'}
+                  </button>
+                </div>
+              )}
+              
+              {/* Render Button */}
+              {!isRenderingAnimation && manimCode && !animationUrl && !renderError && (
+                <button
+                  onClick={handleRenderAnimation}
+                  className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                >
+                  Generate Animation
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Hero Section */}
         <section className="py-16 px-6 sm:px-10 max-w-7xl mx-auto">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">

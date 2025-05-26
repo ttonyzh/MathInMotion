@@ -140,10 +140,13 @@ async function processWithAzureOpenAI(text: string, imageBuffer?: Buffer) {
     
     // Extract Manim code - look for the last Python code block as it's likely the final implementation
     const manimCodeMatches = [...assistantMessage.matchAll(/```(?:python|manim)([\s\S]*?)```/g)];
+    console.log(`Found ${manimCodeMatches.length} code blocks in the response`);
+    
     if (manimCodeMatches.length > 0) {
       // Get the last code block
       const lastMatch = manimCodeMatches[manimCodeMatches.length - 1];
       manimCode = lastMatch[1].trim();
+      console.log('Extracted Manim code:', manimCode.substring(0, 100) + '...');
       
       // Remove all code blocks from the solution text
       solution = assistantMessage;
