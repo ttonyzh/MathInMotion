@@ -17,6 +17,12 @@ interface ProcessResponse {
   manimCode: string;
   visualizationDescription?: string;
   error?: string;
+  suggestion?: string;  // User-friendly suggestions for resolving the issue
+  debugInfo?: {        // Additional debug information (only in development)
+    error?: string;
+    stack?: string;
+    timestamp?: string;
+  };
 }
 
 // Constants
@@ -338,39 +344,36 @@ async function validateAndProcessRequest(request: NextRequest): Promise<ProcessR
       // Process with Azure OpenAI (uses GPT-4 Vision for images/PDFs)
       return await processWithAzureOpenAI(combinedText, buffer);
 
-    } catch (error) {
-      console.error('Error processing file:', error);
-      return {
+    } catch (error) { //catches any errors that occur
+      console.error('Error processing file:', error); //logs the error in terminal
+      return { //returns an error to the user
         success: false,
         solution: '',
         manimCode: '',
         error: "Failed to process the uploaded file. Didn't even get to the processing stage with Azure openAI"
       };
     }
-  } else {
+  } else { //if no file was uploaded, process the text-only problem
     // Process text-only problem
     try {
-      return {
-        ...(await processWithAzureOpenAI(problemText!.trim())),
-        success: true
-      };
-    } catch (error) {
-      console.error('Error processing text problem:', error);
-      return {
+      return await processWithAzureOpenAI(problemText!.trim())
+    } catch (error) { //catches any errors that occur
+      console.error('Error processing text problem:', error); //logs the error in terminal
+      return { //returns an error to the user
         success: false,
         solution: '',
         manimCode: '',
-        error: 'Failed to process the problem text'
+        error: 'Failed to process the problem text. Didn\'t even get to the processing stage with Azure openAI'
       };
     }
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest) { //exports the POST function
   try {
-    const result = await validateAndProcessRequest(request);
+    const result = await validateAndProcessRequest(request); //calls the validateAndProcessRequest function
     
-    if (result.success) {
+    if (result.success) { //if the request was successful
       return NextResponse.json({
         success: true,
         solution: result.solution,
@@ -384,26 +387,57 @@ export async function POST(request: NextRequest) {
         success: false,
         solution: '',
         manimCode: '',
-        error: result.error || 'Failed to process the problem'
+        error: result.error || 'Failed to process your request. Please check your input and try again.',
+        ...(result.error?.includes('file') && {
+          suggestion: 'Please ensure the file is not corrupted and is in a supported format (JPG, PNG, PDF, TXT).'
+        })
       };
-      return NextResponse.json(errorResponse, { status: 400 });
+      return NextResponse.json(errorResponse, { 
+        status: 400,
+        statusText: 'Bad Request'
+      });
     }
     
   } catch (error) {
     // Log the full error for debugging
     console.error('Unexpected error in process-problem endpoint:', error);
     
-    // Return a user-friendly error response
+    // Determine error type for more specific messaging
+    let errorMessage = 'Our system encountered an unexpected error while processing your request.';
+    let errorSuggestion = 'Please try again in a few minutes. If the problem persists, please contact support.';
+    
+    // Check for common error types
+    if (error instanceof Error) {
+      if (error.message.includes('network') || error.message.includes('fetch')) {
+        errorMessage = 'Network error occurred while connecting to our AI service.';
+        errorSuggestion = 'Please check your internet connection and try again.';
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'The request took too long to process.';
+        errorSuggestion = 'Please try again. If the issue continues, the server might be under heavy load.';
+      } else if (error.message.includes('authentication') || error.message.includes('credentials')) {
+        errorMessage = 'Authentication failed when connecting to the AI service.';
+        errorSuggestion = 'This appears to be a server configuration issue. Please contact support.';
+      }
+    }
+    
     const errorResponse: ProcessResponse = {
       success: false,
       solution: '',
       manimCode: '',
-      error: 'An unexpected error occurred while processing your request',
+      error: errorMessage,
+      suggestion: errorSuggestion,
       ...(process.env.NODE_ENV === 'development' && {
-        details: error instanceof Error ? error.message : 'Unknown error'
+        debugInfo: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+          timestamp: new Date().toISOString()
+        }
       })
     };
     
-    return NextResponse.json(errorResponse, { status: 500 });
+    return NextResponse.json(errorResponse, { 
+      status: 500,
+      statusText: 'Internal Server Error'
+    });
   }
 }

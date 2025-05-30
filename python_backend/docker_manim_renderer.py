@@ -50,6 +50,13 @@ class DockerManimRenderer:
         manim_code = manim_code.replace('Highlight', 'SurroundingRectangle')
         manim_code = manim_code.replace('highlight', 'surround')
         
+        # Fix incorrect usage of SurroundingRectangle in self.play()
+        import re
+        # This pattern matches self.play(SurroundingRectangle(...)) and replaces it with the correct form
+        pattern = r'self\.play\s*\(\s*SurroundingRectangle\('
+        replacement = 'rect = SurroundingRectangle(\n            self.play(Create(rect))  # Fixed: Wrap SurroundingRectangle in Create()\n            rect = '
+        manim_code = re.sub(pattern, replacement, manim_code)
+        
         # Print the Manim code for debugging
         print("\n" + "="*80)
         print("GENERATED MANIM CODE:")

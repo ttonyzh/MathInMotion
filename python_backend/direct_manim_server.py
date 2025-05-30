@@ -2,32 +2,53 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import os
 import logging
-import json
-from manim_renderer import ManimRenderer
+import subprocess
+from pathlib import Path
+from .docker_manim_renderer import DockerManimRenderer
+import uuid
 
 # Configure logging
 logging.basicConfig(
-    filename='direct_manim_server.log',
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('direct_manim_server')
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+# Configure CORS to allow requests from the Next.js development server
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }
+})
 
 # Create a directory for storing media files
 MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'media')
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
-# Initialize the Manim renderer
-manim_renderer = ManimRenderer(MEDIA_DIR)
+# Initialize the Docker-based Manim renderer
+manim_renderer = DockerManimRenderer(MEDIA_DIR)
 
-@app.route('/render-manim', methods=['POST'])
+@app.route('/render-manim', methods=['POST', 'OPTIONS'])
 def render_manim():
     """Render Manim code to a video and return it as base64."""
+    if request.method == 'OPTIONS':
+        # Handle preflight request
+        response = jsonify({'status': 'preflight'})
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+        return response
+        
     try:
         data = request.json
+        if not data:
+            logger.error("No JSON data received")
+            return jsonify({'error': 'No data provided'}), 400
+            
         manim_code = data.get('manimCode')
         
         if not manim_code:
@@ -35,51 +56,135 @@ def render_manim():
             return jsonify({'error': 'No Manim code provided'}), 400
         
         logger.info("Received Manim code for rendering")
-        logger.debug(f"Manim code: {manim_code}")
+        logger.debug(f"Manim code: {manim_code[:200]}...")  # Log first 200 chars to avoid huge logs
         
-        # Since we're having issues with Manim dependencies, let's return a text-based response
-        # that acknowledges the code was received but can't be rendered due to technical limitations
+        # Create a temporary file to store the code
+        temp_dir = os.path.join(MEDIA_DIR, 'temp')
+        os.makedirs(temp_dir, exist_ok=True)
         
-        # Extract the class name from the Manim code for the title
-        import re
-        class_match = re.search(r'class\s+(\w+)\s*\(\s*Scene\s*\)', manim_code)
-        scene_name = class_match.group(1) if class_match else "MathVisualization"
+        # Write the code to a temporary file
+        temp_file = os.path.join(temp_dir, f'render_{uuid.uuid4()}.py')
+        with open(temp_file, 'w') as f:
+            f.write(manim_code)
         
-        # Create a message explaining the issue
-        message = f"""The Manim code for '{scene_name}' was successfully received, but could not be rendered due to Cairo library dependency issues on macOS.
-
-The code would create a visualization showing the step-by-step solution to the mathematical problem.
-
-To fix this issue, you would need to properly install Cairo and its dependencies, which is beyond the scope of this demo.
-
-The Manim code is available and can be run separately with a proper Manim installation."""
-        
-        # Return a success response with the message
-        return jsonify({
-            'success': True,
-            'message': message,
-            'manimCode': manim_code,
-            'videoBase64': '',  # No video data
-            'textFallback': True
-        })
+        try:
+            # Use the Docker-based renderer
+            render_result = manim_renderer.render_manim_code(manim_code)
+            
+            if not render_result['success']:
+                error_msg = render_result.get('error', 'Unknown error during rendering')
+                logger.error(f"Failed to render animation: {error_msg}")
+                response = jsonify({
+                    'success': False,
+                    'error': error_msg
+                })
+                response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+                response.headers.add('Access-Control-Allow-Credentials', 'true')
+                response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+                return response, 500
+            
+            # Get the path to the rendered video
+            video_path = render_result['video_path']
+            logger.info(f"Successfully rendered video to: {video_path}")
+            
+            # Return the relative path to the video
+            relative_path = os.path.relpath(video_path, MEDIA_DIR)
+            
+            # Create response with CORS headers
+            response = jsonify({
+                'success': True,
+                'videoPath': relative_path,
+                'message': 'Animation rendered successfully'
+            })
+            
+            # Add CORS headers
+            response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+            response.headers.add('Access-Control-Allow-Credentials', 'true')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+            return response
+            
+        finally:
+            # Clean up the temporary file
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary file: {e}")
     
     except Exception as e:
-        logger.exception("Error rendering Manim animation")
-        return jsonify({
+        error_msg = f'Failed to render animation: {str(e)}'
+        logger.error(error_msg, exc_info=True)
+        response = jsonify({
             'success': False,
-            'error': str(e)
-        }), 500
+            'error': error_msg
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        return response, 500
 
 @app.route('/media/<path:filename>')
 def serve_media(filename):
-    """Serve media files."""
-    return send_file(os.path.join(MEDIA_DIR, filename))
+    """Serve media files with proper MIME types."""
+    try:
+        file_path = os.path.join(MEDIA_DIR, filename)
+        if not os.path.isfile(file_path):
+            logger.error(f"File not found: {file_path}")
+            return jsonify({'error': 'File not found'}), 404
+            
+        # Set cache headers to prevent caching of media files
+        response = send_file(file_path)
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        return response
+    except Exception as e:
+        logger.exception(f"Error serving file {filename}")
+        return jsonify({'error': 'Failed to serve file'}), 500
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint."""
-    return jsonify({'status': 'healthy'})
+    """Health check endpoint that verifies Docker is available."""
+    try:
+        # Check if Docker is running and accessible
+        result = subprocess.run(
+            ['docker', 'info'],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            response = jsonify({
+                'status': 'unhealthy',
+                'error': 'Docker is not running or accessible',
+                'details': result.stderr
+            })
+            response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+            response.headers.add('Access-Control-Allow-Credentials', 'true')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+            return response, 500
+            
+        response = jsonify({
+            'status': 'healthy',
+            'docker': 'available',
+            'manim': 'ready'
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        return response
+    except Exception as e:
+        response = jsonify({
+            'status': 'unhealthy',
+            'error': str(e)
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        return response, 500
 
 if __name__ == '__main__':
     logger.info("Starting Direct Manim Server")
-    app.run(host='0.0.0.0', port=5004, debug=True)
+    # Disable debug mode to prevent auto-reload during rendering
+    app.run(host='0.0.0.0', port=5005, debug=False)
