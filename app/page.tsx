@@ -11,17 +11,26 @@ const LoadingSpinner = dynamic(() => import('./components/ui/LoadingSpinner'), {
   ssr: false,
 });
 
+// Define types for better type safety
+interface SolutionData {
+  solution: string;
+  manimCode: string;
+}
+
 export default function Home() {
-  // Use useState with undefined initial state to prevent hydration mismatch
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [solution, setSolution] = useState<string | null>(null);
-  
-  // Use client-side only rendering for the main UI
+  // UI state
   const [isMounted, setIsMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRenderingAnimation, setIsRenderingAnimation] = useState(false);
   
-  // This ensures the component is only fully rendered on the client
-  // which prevents hydration errors
+  // File and solution state
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [solution, setSolution] = useState<string | null>(null);
+  const [manimCode, setManimCode] = useState<string | null>(null);
+  const [animationUrl, setAnimationUrl] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  
+  // Ensure the component is only fully rendered on the client to prevent hydration errors
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -29,15 +38,12 @@ export default function Home() {
   // Handle file uploads
   const handleFileUpload = (file: File) => {
     setUploadedFile(file);
-    setSolution(null); // Reset solution when new file is uploaded
+    setSolution(null);
+    setManimCode(null);
+    setAnimationUrl(null);
+    setRenderError(null);
     console.log('File uploaded:', file.name);
   };
-  
-  // State for storing Manim code and animation
-  const [manimCode, setManimCode] = useState<string | null>(null);
-  const [animationUrl, setAnimationUrl] = useState<string | null>(null);
-  const [isRenderingAnimation, setIsRenderingAnimation] = useState(false);
-  const [renderError, setRenderError] = useState<string | null>(null);
   
   // Handle rendering Manim animation
   const handleRenderAnimation = async () => {
@@ -45,49 +51,39 @@ export default function Home() {
     
     setIsRenderingAnimation(true);
     setRenderError(null);
-    setAnimationUrl(null); // Clear any previous animation
+    setAnimationUrl(null);
     
     try {
-      console.log('Sending Manim code to backend for rendering...');
+      console.log('Sending Manim code for rendering...');
       const response = await fetch('/api/render-manim', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manimCode }),
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Response not OK:', response.status, errorText);
-        throw new Error(`Failed to render Manim animation: ${response.status} ${errorText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to render animation (${response.status})`);
       }
       
       const data = await response.json();
-      console.log('Received response from Manim rendering server');
       
       if (data.success) {
-        console.log('Manim rendering successful');
-        
-        // Check if we received a text fallback instead of a video
-        if (data.textFallback) {
-          console.log('Received text fallback instead of video');
-          setRenderError(data.message || 'Manim rendering is currently unavailable due to Cairo library dependency issues on macOS.');
-        }
-        // We're specifically using Manim for video now
-        else if (data.videoBase64) {
-          // Set the video data URL for the video element
+        if (data.videoBase64) {
           setAnimationUrl(`data:video/mp4;base64,${data.videoBase64}`);
           console.log('Manim video loaded successfully');
+        } else if (data.textFallback) {
+          console.log('Received text fallback instead of video');
+          setRenderError(data.message || 'Video rendering is not available. Showing code instead.');
         } else {
           throw new Error('No video data received from the server');
         }
       } else {
-        throw new Error(data.error || 'Unknown error occurred');
+        throw new Error(data.error || 'Unknown error occurred during rendering');
       }
     } catch (error) {
-      console.error('Error rendering Manim animation:', error);
-      setRenderError(error instanceof Error ? error.message : 'An unknown error occurred');
+      console.error('Error rendering animation:', error);
+      setRenderError(error instanceof Error ? error.message : 'Failed to render animation');
     } finally {
       setIsRenderingAnimation(false);
     }

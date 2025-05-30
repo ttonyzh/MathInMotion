@@ -4,6 +4,8 @@ import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
 // Define types for better type safety
+
+
 interface ProcessRequest {
   file?: File;
   problemText?: string;
@@ -18,7 +20,7 @@ interface ProcessResponse {
 }
 
 // Constants
-const UPLOAD_DIR = 'uploads';
+const UPLOAD_DIR = 'public/uploads';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_FILE_TYPES = [
   'image/jpeg',
@@ -52,7 +54,7 @@ async function processWithAzureOpenAI(text: string, imageBuffer?: Buffer) {
       textContent: text ? text.substring(0, 100) + '...' : 'None'
     });
     
-    // Check if we're using a mini model which might not support vision
+    // Check if we're using a mini model which might not support vision. Not sure if I need this!!!
     if (deploymentName.includes('mini') && imageBuffer) {
       console.warn('Warning: Using a "mini" model with image content. Mini models may not support vision capabilities.');
     }
@@ -61,34 +63,9 @@ async function processWithAzureOpenAI(text: string, imageBuffer?: Buffer) {
     const url = `${endpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=${apiVersion}`;
 
     // Prepare the content based on what we have
-    const content = [];
-    
-    // Add text content if available
-    if (text) {
-      content.push({
-        type: "text",
-        text: text
-      });
-    }
-    
-    // Add image content if available (for GPT-4 Vision)
-    if (imageBuffer) {
-      // Convert buffer to base64
-      const base64Image = Buffer.from(imageBuffer).toString('base64');
-      content.push({
-        type: "image_url",
-        image_url: {
-          url: `data:image/jpeg;base64,${base64Image}`
-        }
-      });
-    }
+    const contentFromUser = [];
 
-    // Create the request payload
-    const payload = {
-      messages: [
-        {
-          role: "system",
-          content: `You are a helpful STEM tutor specializing in visual explanations. Your task has three parts:
+    const SYSTEM_PROMPT = `You are a helpful STEM tutor specializing in visual explanations. Your task has three parts:
 
 1. Use OCR to read and understand any text in the uploaded image or PDF.
 2. Analyze the STEM problem and provide a clear, step-by-step solution.
@@ -118,11 +95,38 @@ For the visualization:
   \`\`\`
 - IMPORTANT: Always use self.play(Create(object)) or self.play(Write(object)) to animate objects
 - Ensure the visualization illustrates the key concepts in the problem
-- Use appropriate colors, labels, and animations to make the explanation clear`
+- Use appropriate colors, labels, and animations to make the explanation clear`;
+    
+    // Add text content if available
+    if (text) {
+      contentFromUser.push({
+        type: "text",
+        text: text
+      });
+    }
+    
+    // Add image content if available (for GPT-4 Vision)
+    if (imageBuffer) {
+      // Convert buffer to base64
+      const base64Image:string = Buffer.from(imageBuffer).toString('base64');
+      contentFromUser.push({
+        type: "image_url",
+        image_url: {
+          url: `data:image/jpeg;base64,${base64Image}`
+        }
+      });
+    }
+
+    // Create the request payload
+    const payload = {
+      messages: [
+        { //This is the system prompt
+          role: "system",
+          content: SYSTEM_PROMPT
         },
-        {
+        { //This is the user prompt
           role: "user",
-          content: content
+          content: contentFromUser
         }
       ],
       max_tokens: 2000,
@@ -130,66 +134,65 @@ For the visualization:
     };
 
     // Make the API request
-    try {
-      console.log('Sending request to Azure OpenAI with payload:', {
-        url,
-        messageCount: payload.messages.length,
-        hasImageContent: payload.messages.some(m => 
-          Array.isArray(m.content) && 
-          m.content.some(c => c.type === 'image_url')
-        )
+    console.log('Sending request to Azure OpenAI with payload:', {
+      url,
+      messageCount: payload.messages.length,
+      hasImageContent: payload.messages.some(m => 
+        Array.isArray(m.content) && 
+        m.content.some(c => c.type === 'image_url')
+      )
+    });
+
+    const response = await fetch(url, {
+      method: 'POST', //Indicates that we are using the HTTP POST method
+      headers: {
+        'Content-Type': 'application/json',  //Indicates that we are sending JSON data
+        'api-key': apiKey //Indicates that we are using the API key for authentication
+      },
+      body: JSON.stringify(payload) //We specified before that we are sending a JSON object, but the payload is just a list, so stringifying it turns it into a JSON string
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Detailed API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText
       });
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'api-key': apiKey
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Azure OpenAI API error response:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorText
-        });
-        
-        let errorData;
-        try {
-          errorData = JSON.parse(errorText);
-        } catch (e) {
-          errorData = { error: errorText };
-        }
-        
-        // Check for specific error types
-        const visionErrorKeywords = [
-          'does not support vision',
-          'multimodal',
-          'image input',
-          'vision capabilities',
-          'image_url',
-          'not supported'
-        ];
-        
-        if (response.status === 400 && visionErrorKeywords.some(keyword => errorText.toLowerCase().includes(keyword))) {
-          console.error('The current deployment does not support vision capabilities');
-          throw new Error(`Your Azure OpenAI deployment (${deploymentName}) does not support vision capabilities. Please use a GPT-4 Vision model.`);
-        }
-        
-        throw new Error(`Azure OpenAI API error: ${JSON.stringify(errorData)}`);
+      let errorData; //Initialize errorData to null
+      try {
+        errorData = JSON.parse(errorText); //Try to parse the error text as JSON
+      } catch (e) {
+        errorData = { error: errorText }; //If it fails, set errorData to the error text
       }
+      
+      // Check for specific error types
+      const visionErrorKeywords = [ //checks for visions incapabilities with the openAI model I am using
+        'does not support vision',
+        'multimodal',
+        'image input',
+        'vision capabilities',
+        'image_url',
+        'not supported'
+      ];
+      
+      if (response.status === 400 && visionErrorKeywords.some(keyword => errorText.toLowerCase().includes(keyword))) { //checks if errortext includes any of these keywords and raises an error if it does, stating that there is the problem with the openAI model
+        console.error('The current deployment does not support vision capabilities'); //logs the error in terminal
+        throw new Error(`Your Azure OpenAI deployment (${deploymentName}) does not support vision capabilities. Please use a GPT-4 Vision model.`); //throws an error to the user via UI
+      }
+      
+      throw new Error(`Azure OpenAI API error: ${JSON.stringify(errorData)}`); //throws a general API error to the user via UI
+    }
 
-      const data = await response.json();
+    const data = await response.json(); //converts the response from Azure OpenAI to JSON so we can use it as a javascript object
     
     // Extract the solution text and Manim code from the response
-    const assistantMessage = data.choices[0]?.message?.content || '';
-    console.log('Raw assistant message:', assistantMessage.substring(0, 200) + '...');
+    const AIGeneratedMessage = data.choices[0]?.message?.content || ''; //gets the AI generated message from the response
+    console.log('Raw assistant message: \n\n', AIGeneratedMessage); //logs the AI generated message to the terminal
     
     // Parse the response to extract solution text, visualization description, and Manim code
-    let solution = assistantMessage;
+    let solution = AIGeneratedMessage;
     let manimCode = '';
     let visualizationDescription = '';
     
@@ -203,100 +206,82 @@ For the visualization:
       /class\s+\w+\s*\([\s\S]*?Scene\)[\s\S]*?def\s+construct\([\s\S]*?def\s+\w+\s*\([\s\S]*?\).*?\{[\s\S]*?\}/g,
     ];
     
-    let manimCodeMatches: RegExpMatchArray[] = [];
+    let manimCodeMatches: RegExpMatchArray[] = []; //this array has type RegExpMatchArray[]
     
     // Try each pattern until we find matches
     for (const pattern of codeBlockPatterns) {
-      const matches = [...assistantMessage.matchAll(pattern)];
-      if (matches.length > 0) {
+      const matches = [...AIGeneratedMessage.matchAll(pattern)]; //turns the matches into an array
+      if (matches.length > 0) { //if we find matches
         manimCodeMatches = matches;
-        console.log(`Found ${manimCodeMatches.length} code blocks using pattern:`, pattern);
+        console.log(`Found ${manimCodeMatches.length} code blocks using pattern:`, pattern); //logs the number of code blocks found using the pattern and the pattern itself
         break;
       }
     }
     
-    if (manimCodeMatches.length > 0) {
+    if (manimCodeMatches.length > 0) { //there is a match
       // Get the last code block as it's likely the final implementation
-      const lastMatch = manimCodeMatches[manimCodeMatches.length - 1];
-      manimCode = lastMatch[1]?.trim() || '';
-      
+      const lastMatch = manimCodeMatches[manimCodeMatches.length - 1]; //getting the code without the '''python marker
+      manimCode = lastMatch[1]?.trim() || ''; //trimming white space if needed
       if (manimCode) {
-        console.log('Extracted Manim code (first 200 chars):', manimCode.substring(0, 200) + '...');
         
         // Clean up the code if it has any markdown formatting left
-        if (manimCode.startsWith('python') || manimCode.startsWith('manim')) {
+        if (manimCode.startsWith('python') || manimCode.startsWith('manim')) { //extra layer of checking for formatting issues
           manimCode = manimCode.split('\n').slice(1).join('\n').trim();
         }
+
+        console.log('Extracted Manim code: \n \n' + manimCode); //logs the extracted Manim code
         
         // Remove all code blocks from the solution text
-        solution = assistantMessage;
         for (const match of manimCodeMatches) {
-          solution = solution.replace(match[0], '');
+          solution = solution.replace(match[0], ''); //removing the code blocks from the solution text. This keeps the solution text cleaner and shorter
         }
-        solution = solution.trim();
-        
-        // Try to extract the visualization description
-        const visualizationKeywords = [
-          'visualization', 'animation', 'visual explanation', 'manim',
-          'scene', 'animate', 'diagram', 'illustration'
-        ];
-        
-        // Look for a paragraph that describes the visualization
-        const paragraphs = solution.split('\n\n');
-        for (const paragraph of paragraphs) {
-          const lowerParagraph = paragraph.toLowerCase();
-          if (visualizationKeywords.some(keyword => lowerParagraph.includes(keyword))) {
-            visualizationDescription = paragraph.trim();
-            break;
-          }
-        }
+        solution = solution.trim(); //trimming white space if needed
+
       } else {
-        console.warn('Found code blocks but could not extract valid Manim code');
+        console.warn('Found code blocks but could not extract valid Manim code'); //logs a warning if we find code blocks but could not extract valid Manim code
+        throw new Error('Found code blocks but could not extract valid Manim code');
       }
     } else {
-      console.warn('No Manim code blocks found in the response');
-      // If no code blocks found, try to extract any Python code that looks like Manim
-      const pythonCodeMatch = assistantMessage.match(/(class\s+\w+\s*\([\s\S]*?Scene\)[\s\S]*?def\s+construct\([\s\S]*?def\s+\w+\s*\([\s\S]*?\).*?\{[\s\S]*?\})/);
+      console.warn('No Manim code blocks found in the response'); //logs a warning if we find no Manim code blocks in the response
+      // If no code blocks found, try to extract any Python code that looks like Manim. This is like last last resort if nothing else works
+      const pythonCodeMatch = AIGeneratedMessage.match(/(class\s+\w+\s*\([\s\S]*?Scene\)[\s\S]*?def\s+construct\([\s\S]*?def\s+\w+\s*\([\s\S]*?\).*?\{[\s\S]*?\})/); //BS i don't understand
       if (pythonCodeMatch) {
         manimCode = pythonCodeMatch[1].trim();
         console.log('Extracted Manim code from raw text (first 200 chars):', manimCode.substring(0, 200) + '...');
+      } else { //Throw error if no Manim code could be extracted at all
+        console.warn('No Manim code could be extracted, continuing without visualization');
+        throw new Error('No Manim code could be extracted, continuing without visualization');
       }
     }
 
-    return {
+    return { //we don't experience any errors so we return the solution, manim code, and visualization description
       success: true,
       solution,
       manimCode,
       visualizationDescription
     };
-    } catch (error: any) {
-      console.error('Error in Azure OpenAI processing:', error);
-      if (error?.message && error.message.includes('does not support vision')) {
-        return {
-          success: false,
-          solution: "Error: Your Azure OpenAI deployment (" + deploymentName + ") does not support vision capabilities. Please use a GPT-4 Vision model.",
-          manimCode: "",
-          visualizationDescription: "",
-          error: "Vision capabilities not supported"
-        };
-      }
-      throw error;
-    }
-    
-  } catch (error) {
-    console.error('Error processing with Azure OpenAI:', error);
-    throw error;
+
+  } catch (error: unknown) { //catches any errors that occur
+    console.error('Error processing request:', error); //logs the error in terminal
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'; //check what type the error is
+    return { //return the error to the user
+      success: false,
+      solution: 'An unexpected error occurred while processing your request.', //returns a general error message to the user
+      manimCode: '',
+      visualizationDescription: '',
+      error: errorMessage
+    };
   }
 }
 
-async function validateAndProcessRequest(request: NextRequest): Promise<ProcessResponse> {
-  const formData = await request.formData();
-  const file = formData.get('file') as File | null;
-  const problemText = formData.get('problemText') as string | null;
+async function validateAndProcessRequest(request: NextRequest): Promise<ProcessResponse> { //function that returns a promise. Function takes in request of type NextRequest, and returns a promise of type ProcessResponse
+  const formData = await request.formData(); //gets the form data from the request
+  const file = formData.get('file') as File | null; //gets the file from the form data
+  const problemText = formData.get('problemText') as string | null; //gets the problem text from the form data
   
-  // Validate input
+  // Validate input: checking if the user has uploaded a file or provided problem text
   if (!file && !problemText?.trim()) {
-    return {
+    return { //return an error to the user
       success: false,
       solution: '',
       manimCode: '',
@@ -306,7 +291,7 @@ async function validateAndProcessRequest(request: NextRequest): Promise<ProcessR
   
   // Handle file upload if present
   if (file) {
-    // Validate file type
+    // Validate file type: checking if the file is a PDF, image, or text file
     if (!ALLOWED_FILE_TYPES.includes(file.type)) {
       return {
         success: false,
@@ -316,7 +301,7 @@ async function validateAndProcessRequest(request: NextRequest): Promise<ProcessR
       };
     }
     
-    // Validate file size
+    // Validate file size: checking if the file is too large
     if (file.size > MAX_FILE_SIZE) {
       return {
         success: false,
@@ -326,39 +311,40 @@ async function validateAndProcessRequest(request: NextRequest): Promise<ProcessR
       };
     }
     
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const bytes: ArrayBuffer = await file.arrayBuffer(); //converts the file to a arrayBuffer
+    const buffer:Buffer = Buffer.from(bytes); //converts the arrayBuffer to a buffer. Buffers are what are used in node.js 
     
-    try {
+    try { //try to process the file
       // Create uploads directory if it doesn't exist
-      const uploadDir = join(process.cwd(), UPLOAD_DIR);
+      const uploadDir:string = join(process.cwd(), UPLOAD_DIR);
       await mkdir(uploadDir, { recursive: true });
       
       // Save the file with a unique name
-      const uniqueId = uuidv4();
-      const filename = `${uniqueId}-${file.name.replace(/[^\w.]+/g, '-')}`;
-      const filepath = join(uploadDir, filename);
-      await writeFile(filepath, buffer);
+      const uniqueId:string = uuidv4(); //generates a unique id for the file
+      const filename:string = `${uniqueId}-${file.name.replace(/[^\w.]+/g, '-')}`; //removes any special characters from the file name
+      const filepath:string = join(uploadDir, filename); //joins the upload directory and the file name
+      await writeFile(filepath, buffer); //writes the file to the upload directory
       
       // Add context about the file type to help the AI
-      const fileContext = `This is a ${file.type} file containing a STEM problem that needs to be solved and visualized.`;
-      const combinedText = problemText?.trim() 
-        ? `${fileContext}\n\n${problemText}` 
-        : fileContext;
+      const fileContext:string = `This is a ${file.type} file containing a STEM problem that needs to be solved and visualized.`;
+      
+      // Initialize combinedText with the file context
+      let combinedText:string = fileContext;
+      // If there's additional problem text, append it with some spacing
+      if (problemText?.trim()) {
+        combinedText = `${fileContext}\n\n${problemText}`;
+      }
       
       // Process with Azure OpenAI (uses GPT-4 Vision for images/PDFs)
-      return {
-        ...(await processWithAzureOpenAI(combinedText, buffer)),
-        success: true
-      };
-      
+      return await processWithAzureOpenAI(combinedText, buffer);
+
     } catch (error) {
       console.error('Error processing file:', error);
       return {
         success: false,
         solution: '',
         manimCode: '',
-        error: 'Failed to process the uploaded file'
+        error: "Failed to process the uploaded file. Didn't even get to the processing stage with Azure openAI"
       };
     }
   } else {
