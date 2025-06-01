@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     controller = new AbortController();
     timeoutId = setTimeout(() => controller!.abort(), RENDER_TIMEOUT_MS);
     
-    const response: Response = await fetch(BACKEND_URL, { //sends the request to the backend, localhost:5005. Sends this code to the manim server and it outputs an image or video
+    const response = await fetch(BACKEND_URL, { //sends the request to the backend, localhost:5005. Sends this code to the manim server and it outputs an image or video
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ manimCode }), //changes raw manim code into a json string. We need the curly braces because we are sending a json object.

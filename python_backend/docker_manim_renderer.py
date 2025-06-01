@@ -2,39 +2,39 @@ import os
 import subprocess
 import logging
 import uuid
+import re
 from pathlib import Path
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+logging.basicConfig( #configure logging
+    level=logging.INFO, # Set to DEBUG for more verbose logging
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s' # Set the format for the log messages. Name of logger is always docker_manim_renderer
 )
-logger = logging.getLogger('docker_manim_renderer')
+logger = logging.getLogger('docker_manim_renderer') #creates a logger object whose name is always docker_manim_renderer
 
-class DockerManimRenderer:
-    def __init__(self, host_media_dir):
+class DockerManimRenderer: #define a class called DockerManimRenderer
+    def __init__(self, host_media_dir): #initialize the DockerManimRenderer class. host_media_dir is the path to the directory on the host where media will be saved
         """
         Initialize the Docker-based Manim renderer.
         
         Args:
             host_media_dir: Path to the directory on the host where media will be saved
         """
-        self.host_media_dir = Path(host_media_dir).resolve()  # Use absolute path
-        self.host_media_dir.mkdir(parents=True, exist_ok=True)
+        self.host_media_dir = Path(host_media_dir).resolve()  # Use absolute path.  Converts the passed in path to an absolute path
+        self.host_media_dir.mkdir(parents=True, exist_ok=True) #create the directory if it doesn't exist
         
         # Create necessary subdirectories
         (self.host_media_dir / 'temp').mkdir(exist_ok=True)
         (self.host_media_dir / 'videos').mkdir(exist_ok=True)
         
-        logger.info(f"Initialized DockerManimRenderer with host media directory: {self.host_media_dir}")
-        logger.info(f"Directory contents: {list(self.host_media_dir.glob('*'))}")
+        logger.info(f"Initialized DockerManimRenderer with host media directory: {self.host_media_dir}") #log the initialization of the DockerManimRenderer class
+        logger.info(f"Directory contents: {list(self.host_media_dir.glob('*'))}") #log the contents of the directory
     
     def detect_scene_class(self, manim_code):
         """Detect the scene class name from the Manim code."""
-        import re
-        scene_pattern = r'class\s+(\w+)\s*\(\s*Scene\s*\)'
-        match = re.search(scene_pattern, manim_code)
-        return match.group(1) if match else None
+        scene_pattern = r'class\s+(\w+)\s*\(\s*Scene\s*\)' #pattern to match the scene class name
+        match = re.search(scene_pattern, manim_code) #search for the pattern in the Manim code
+        return match.group(1) if match else None #return the scene class name if found, otherwise return None
     
     def render_manim_code(self, manim_code):
         """
@@ -46,13 +46,11 @@ class DockerManimRenderer:
         Returns:
             dict: Dictionary containing 'success' status and either 'video_path' or 'error'
         """
-        # Replace any instances of Highlight with SurroundingRectangle
+        # Replace any instances of Highlight with SurroundingRectangle. MAY NOT NEED THIS
         manim_code = manim_code.replace('Highlight', 'SurroundingRectangle')
         manim_code = manim_code.replace('highlight', 'surround')
         
-        # Fix incorrect usage of SurroundingRectangle in self.play()
-        import re
-        # This pattern matches self.play(SurroundingRectangle(...)) and replaces it with the correct form
+        # This pattern matches self.play(SurroundingRectangle(...)) and replaces it with the correct form. MAY NOT NEED THIS
         pattern = r'self\.play\s*\(\s*SurroundingRectangle\('
         replacement = 'rect = SurroundingRectangle(\n            self.play(Create(rect))  # Fixed: Wrap SurroundingRectangle in Create()\n            rect = '
         manim_code = re.sub(pattern, replacement, manim_code)
@@ -70,26 +68,21 @@ class DockerManimRenderer:
             script_filename = f"render_{render_id}.py"
             output_filename = f"output_{render_id}.mp4"
             
-            # Create the script file in a temporary directory
-            temp_dir = self.host_media_dir / "temp"
-            temp_dir.mkdir(exist_ok=True)
-            script_path = temp_dir / script_filename
+            # Create the Manim script file in a temporary directory
+            temp_dir = self.host_media_dir / "temp" #create a temporary directory
+            temp_dir.mkdir(exist_ok=True) #create the directory if it doesn't exist
+            script_path = temp_dir / script_filename #create the script file path
             
             # Save the Manim code to a file in your home directory
-            home_dir = Path.home()
+            home_dir = Path.home() #get the home directory
             debug_file = home_dir / 'manim_debug.py'
-            with open(debug_file, 'w') as f:
-                f.write(manim_code)
+            with open(debug_file, 'w') as f: #write the Manim code to a file
+                f.write(manim_code) #write the Manim code to a file
             print(f"\n\n=== MANIM CODE SAVED TO: {debug_file} ===\n")
             
-            with open(script_path, 'w') as f:
-                f.write(manim_code)
-            
-            # Log the Manim code to a file for debugging
-            debug_log_path = self.host_media_dir / "debug_manim_code.py"
-            with open(debug_log_path, 'w') as f:
-                f.write("# Generated Manim code:\n" + manim_code)
-            logger.info(f"Saved generated Manim code to {debug_log_path}")
+            #actually writing the manim code to the script_path file in the temp directory. the manim_debug file is just for debugging and will always be in the home directory. But the script_path file is the actual file that will be run by docker, but could be deleted after the docker command is run
+            with open(script_path, 'w') as f: #write the Manim code to a file
+                f.write(manim_code) #write the Manim code to a file
             
             # Detect the scene class
             scene_class = self.detect_scene_class(manim_code)
@@ -102,14 +95,18 @@ class DockerManimRenderer:
             
             # Prepare the Docker command with a specific image that includes ffmpeg
             docker_cmd = [
-                'docker', 'run', '--rm',
-                '-v', f"{script_path.parent}:/manim/script",
-                '-v', f"{output_dir}:/manim/output",
-                'manimcommunity/manim:latest',  # Use latest version that includes ffmpeg
-                'manim', f"/manim/script/{script_filename}",
-                scene_class, 
+                #sets up the docker command
+                'docker', 'run', '--rm', #docker = run docker, --rm = remove the container after it's done, run = run the docker command
+                #-v mounts a directory from the host to the container. So the next two lines mounts the script file and the output directory to the container
+                '-v', f"{script_path.parent}:/manim/script", # f"{script_path.parent}:/manim/script" = the path to the script file
+                '-v', f"{output_dir}:/manim/output", # f"{output_dir}:/manim/output" = the path to the output directory
+
+                'manimcommunity/manim:latest',  # Use latest version of Manim that includes ffmpeg
+                'manim', #run the manim command
+                f"/manim/script/{script_filename}", #the path to the script file
+                scene_class, #the scene class to render
                 '-qm',  # Medium quality, 480p30
-                '--media_dir', '/manim/output',
+                '--media_dir', '/manim/output', #the path to the output directory
                 '--progress_bar', 'none',  # Disable progress bar to avoid log spam
                 '--format', 'mp4',  # Explicitly set output format to mp4
                 '--disable_caching'  # Disable caching to avoid potential issues
@@ -118,49 +115,49 @@ class DockerManimRenderer:
             logger.info(f"Running Docker command: {' '.join(docker_cmd)}")
             
             # Run the Docker command with a timeout (60 seconds)
-            try:
-                result = subprocess.run(
-                    docker_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=60  # 60 second timeout
-                )
+            result = subprocess.run(
+                docker_cmd,
+                capture_output=True,
+                text=True,
+                timeout=60  # 60 second timeout
+            )
+            
+            # Log the output
+            if result.stdout:
+                logger.info(f"Docker command output:\n{result.stdout}")
+            if result.stderr:
+                logger.error(f"Docker command error:\n{result.stderr}")
                 
-                # Log the output
-                if result.stdout:
-                    logger.info(f"Docker command output:\n{result.stdout}")
-                if result.stderr:
-                    logger.error(f"Docker command error:\n{result.stderr}")
+            # Check if the command was successful
+            if result.returncode != 0:
+                return {
+                    'success': False,
+                    'error': f"Failed to render animation: {result.stderr}"
+                }
                 
-                # Check if the command was successful
-                if result.returncode != 0:
-                    return {
-                        'success': False,
-                        'error': f"Failed to render animation: {result.stderr}"
-                    }
+            # The rendered video should be in the output directory
+            # Check the standard output location first
+            output_path = output_dir / 'videos' / script_path.stem / '720p30' / f"{scene_class}.mp4"
                 
-                # The rendered video should be in the output directory
-                # Check the standard output location first
-                output_path = output_dir / 'videos' / script_path.stem / '720p30' / f"{scene_class}.mp4"
-                
-                if not output_path.exists():
-                    # Try alternative location (older Manim versions or different quality)
-                    video_dir = output_dir / 'videos' / script_path.stem
-                    if video_dir.exists():
-                        # Find the first mp4 file in any subdirectory
-                        mp4_files = list(video_dir.rglob('*.mp4'))
-                        if mp4_files:
-                            output_path = mp4_files[0]
-                        else:
-                            return {
-                                'success': False,
-                                'error': f"No MP4 files found in {video_dir}"
-                            }
+            #theoretically, the video should be here, but if it's not, we'll try to find it in the videos directory.
+            if not output_path.exists():
+                # Try alternative location (older Manim versions or different quality)
+                video_dir = output_dir / 'videos' / script_path.stem
+                if video_dir.exists():
+                    # Find the first mp4 file in any subdirectory
+                    mp4_files = list(video_dir.rglob('*.mp4'))
+                    if mp4_files:
+                        output_path = mp4_files[0]
                     else:
                         return {
                             'success': False,
-                            'error': f"Video directory not found: {video_dir}"
+                            'error': f"No MP4 files found in {video_dir}"
                         }
+                else:
+                    return {
+                        'success': False,
+                        'error': f"Video directory not found: {video_dir}"
+                    }
                 
                 # Move the file to the final location with a better name
                 final_path = output_dir / f"animation_{render_id}.mp4"
@@ -177,12 +174,18 @@ class DockerManimRenderer:
                     'video_path': str(final_path)
                 }
                 
-            except subprocess.TimeoutExpired:
+            else:
+                # If we found the video in the expected location, return its path
                 return {
-                    'success': False,
-                    'error': "Rendering timed out after 60 seconds"
+                    'success': True,
+                    'video_path': str(output_path)
                 }
-            
+                
+        except subprocess.TimeoutExpired:
+            return {
+                'success': False,
+                'error': "Rendering timed out after 60 seconds"
+            }
         except Exception as e:
             logger.exception("Error in render_manim_code")
             return {
