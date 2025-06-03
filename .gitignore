@@ -50,3 +50,4 @@ python_backend/venv/
 python_backend/media/
 python_backend.log
 nextjs.log
+venv311/
