@@ -40,6 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Uploaded files (temporary, user-generated)
+/public/uploads/
+
 # Python
 __pycache__/
 *.py[cod]

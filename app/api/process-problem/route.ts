@@ -5,12 +5,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Define types for better type safety
 
-
-interface ProcessRequest {
-  file?: File;
-  problemText?: string;
-}
-
 interface ProcessResponse {
   success: boolean;
   solution: string;
@@ -37,7 +31,7 @@ const ALLOWED_FILE_TYPES = [
 ];
 
 // Azure OpenAI integration
-async function processWithAzureOpenAI(text: string, imageBuffer?: Buffer) {
+async function processWithAzureOpenAI(text: string, imageBuffer?: Buffer, mimeType?: string) {
   try {
     // Extract environment variables
     const apiKey = process.env.AZURE_OPENAI_API_KEY;
@@ -71,37 +65,92 @@ async function processWithAzureOpenAI(text: string, imageBuffer?: Buffer) {
     // Prepare the content based on what we have
     const contentFromUser = [];
 
-    const SYSTEM_PROMPT = `You are a helpful STEM tutor specializing in visual explanations. Your task has three parts:
+    const SYSTEM_PROMPT = `You are a helpful STEM tutor specializing in visual explanations. Your task has two parts:
 
-1. Use OCR to read and understand any text in the uploaded image or PDF.
-2. Analyze the STEM problem and provide a clear, step-by-step solution.
-3. Create a detailed description of how to visualize this solution, followed by Python code using the Manim library that implements this visualization.
+1. Read and understand the STEM problem. If an image or PDF is provided, use OCR to extract the problem. If plain text is provided, use it directly.
+2. Analyze the STEM problem and provide a clear, step-by-step solution as Python Manim code.
 
-For the visualization:
-- First describe in natural language what the animation should show and how it should progress
-- Then provide well-commented Manim code that implements this visualization
-- Always include these imports at the top of your Manim code:
-  \`\`\`python
-  from manim import *
-  \`\`\`
-- To highlight elements, use this pattern:
-  \`\`\`python
-  class MyScene(Scene):
-      def construct(self):
-          # First create the object to highlight
-          equation = MathTex('2 + 2 = 4')
-          self.play(Write(equation))
-          
-          # Create and animate a rectangle around it
-          rect = SurroundingRectangle(equation, color=YELLOW)
-          self.play(Create(rect))  # <-- IMPORTANT: Use Create() with SurroundingRectangle
-          
-          # Wait a moment before continuing
-          self.wait()
-  \`\`\`
-- IMPORTANT: Always use self.play(Create(object)) or self.play(Write(object)) to animate objects
-- Ensure the visualization illustrates the key concepts in the problem
-- Use appropriate colors, labels, and animations to make the explanation clear`;
+CRITICAL ANIMATION RULES — follow these exactly:
+
+**Cascading Step Display**:
+- Show each step of the solution as a new line appearing BELOW all previous steps.
+- NEVER remove, fade out, or replace previous steps. Every step stays visible on screen.
+- Align all steps to the left, starting near the top-left of the screen.
+- Position the first step with: step.to_corner(UL, buff=0.8)
+- Position each subsequent step with: step.next_to(previous_step, DOWN, buff=0.4) and step.align_to(first_step, LEFT)
+- Animate each step appearing with self.play(Write(step)), then self.wait(0.5) before the next step.
+
+**Boxes / Highlighting**:
+- Do NOT use SurroundingRectangle on any intermediate steps.
+- ONLY draw one SurroundingRectangle(color=YELLOW) around the FINAL answer after all steps are shown.
+
+**Text**:
+- Use Text() for ALL text and equations. NEVER use MathTex() or Tex() — LaTeX is not installed.
+- Use font_size=36 for steps. If there are many steps, reduce to font_size=28 so they all fit on screen.
+
+**Colors**:
+- Use WHITE for all intermediate steps.
+- Use GREEN for the final answer text.
+- Use YELLOW for the SurroundingRectangle around the final answer.
+
+**Screen Boundaries**:
+- Keep all content within -6.5 to 6.5 horizontal and -3.5 to 3.5 vertical.
+- If steps risk going off the bottom, reduce font_size or add self.camera.frame.animate.shift(DOWN * n) to scroll.
+
+**Imports**: Always start with:
+\`\`\`python
+from manim import *
+\`\`\`
+
+**Intermediate Operation Steps**:
+- Between each equation line, show an intermediate line that explicitly applies the operation to BOTH sides.
+- For example, to solve 2x + 5 = 4:
+  1. Show the original equation: "2x + 5 = 4"
+  2. Show the operation applied: "2x + 5 - 5 = 4 - 5"   ← subtract 5 from both sides
+  3. Show the simplified result: "2x = -1"
+  4. Show the next operation: "2x / 2 = -1 / 2"          ← divide both sides by 2
+  5. Show the final result: "x = -1/2"                    ← GREEN, with yellow box
+- Operation lines (step 2, 4 above) use color=BLUE to visually distinguish them from result lines.
+- Result lines (step 1, 3, 5 above) use color=WHITE (or GREEN for the final answer).
+
+**Required pattern — use this exact structure**:
+\`\`\`python
+from manim import *
+
+class SolveEquation(Scene):
+    def construct(self):
+        # Each tuple: (text, color)
+        # BLUE = operation applied to both sides, WHITE = simplified result, GREEN = final answer
+        steps = [
+            ("2x + 5 = 4", WHITE),
+            ("2x + 5 - 5 = 4 - 5", BLUE),
+            ("2x = -1", WHITE),
+            ("2x / 2 = -1 / 2", BLUE),
+            ("x = -1/2", GREEN),
+        ]
+
+        step_objects = []
+
+        for i, (step_text, color) in enumerate(steps):
+            step = Text(step_text, font_size=36, color=color)
+
+            if not step_objects:
+                step.to_corner(UL, buff=0.8)
+            else:
+                step.next_to(step_objects[-1], DOWN, buff=0.4)
+                step.align_to(step_objects[0], LEFT)
+
+            self.play(Write(step))
+            self.wait(0.5)
+            step_objects.append(step)
+
+        # Box only the final answer
+        final_box = SurroundingRectangle(step_objects[-1], color=YELLOW)
+        self.play(Create(final_box))
+        self.wait(2)
+\`\`\`
+
+Adapt the steps list to match the actual problem. Always show the operation applied to both sides (BLUE) before showing the simplified result (WHITE). The final answer is always GREEN with a YELLOW box.`;
     
     // Add text content if available
     if (text) {
@@ -118,12 +167,16 @@ For the visualization:
       contentFromUser.push({
         type: "image_url",
         image_url: {
-          url: `data:image/jpeg;base64,${base64Image}`
+          url: `data:${mimeType || 'image/jpeg'};base64,${base64Image}`
         }
       });
     }
 
-    // Create the request payload
+    // Create the request payload.
+    // Reasoning models (gpt-5-mini) require plain string content for text-only messages.
+    // Only use the content array format when an image is included.
+    const userContent = imageBuffer ? contentFromUser : (text || '');
+
     const payload = {
       messages: [
         { //This is the system prompt
@@ -132,11 +185,10 @@ For the visualization:
         },
         { //This is the user prompt
           role: "user",
-          content: contentFromUser
+          content: userContent
         }
       ],
-      max_tokens: 2000,
-      temperature: 0.7
+      max_completion_tokens: 10000
     };
 
     // Make the API request
@@ -179,8 +231,7 @@ For the visualization:
         'multimodal',
         'image input',
         'vision capabilities',
-        'image_url',
-        'not supported'
+        'image_url'
       ];
       
       if (response.status === 400 && visionErrorKeywords.some(keyword => errorText.toLowerCase().includes(keyword))) { //checks if errortext includes any of these keywords and raises an error if it does, stating that there is the problem with the openAI model
@@ -194,7 +245,8 @@ For the visualization:
     const data = await response.json(); //converts the response from Azure OpenAI to JSON so we can use it as a javascript object
     
     // Extract the solution text and Manim code from the response
-    const AIGeneratedMessage = data.choices[0]?.message?.content || ''; //gets the AI generated message from the response
+    console.log('Full API response:', JSON.stringify(data, null, 2)); //log full response to debug empty content
+    const AIGeneratedMessage = data.choices[0]?.message?.content || data.choices[0]?.message?.reasoning_content || ''; //gets the AI generated message from the response
     console.log('Raw assistant message: \n\n', AIGeneratedMessage); //logs the AI generated message to the terminal
     
     // Parse the response to extract solution text, visualization description, and Manim code
@@ -244,20 +296,39 @@ For the visualization:
         solution = solution.trim(); //trimming white space if needed
 
       } else {
-        console.warn('Found code blocks but could not extract valid Manim code'); //logs a warning if we find code blocks but could not extract valid Manim code
-        throw new Error('Found code blocks but could not extract valid Manim code');
+        console.warn('Found code blocks but could not extract valid Manim code');
+        manimCode = '';
       }
     } else {
-      console.warn('No Manim code blocks found in the response'); //logs a warning if we find no Manim code blocks in the response
-      // If no code blocks found, try to extract any Python code that looks like Manim. This is like last last resort if nothing else works
-      const pythonCodeMatch = AIGeneratedMessage.match(/(class\s+\w+\s*\([\s\S]*?Scene\)[\s\S]*?def\s+construct\([\s\S]*?def\s+\w+\s*\([\s\S]*?\).*?\{[\s\S]*?\})/); //BS i don't understand
-      if (pythonCodeMatch) {
-        manimCode = pythonCodeMatch[1].trim();
-        console.log('Extracted Manim code from raw text (first 200 chars):', manimCode.substring(0, 200) + '...');
-      } else { //Throw error if no Manim code could be extracted at all
-        console.warn('No Manim code could be extracted, continuing without visualization');
-        throw new Error('No Manim code could be extracted, continuing without visualization');
+      console.warn('No Manim code blocks found in the response');
+
+      // Fallback 1: The entire response IS the Manim script (no fences, starts with import)
+      const looksLikeManimScript = /from\s+manim\s+import/.test(AIGeneratedMessage) &&
+        /class\s+\w+\s*\(\s*Scene\s*\)/.test(AIGeneratedMessage);
+
+      if (looksLikeManimScript) {
+        manimCode = AIGeneratedMessage.trim();
+        solution = ''; // whole response is code, nothing left for solution text
+        console.log('Treating entire response as bare Manim script');
+      } else {
+        // Fallback 2: find a Scene class anywhere in the text
+        const sceneMatch = AIGeneratedMessage.match(/((?:from manim import[\s\S]*?)?class\s+\w+\s*\(\s*Scene\s*\)[\s\S]*)/);
+        if (sceneMatch) {
+          manimCode = sceneMatch[1].trim();
+          solution = AIGeneratedMessage.slice(0, AIGeneratedMessage.indexOf(sceneMatch[1])).trim();
+          console.log('Extracted Manim code via Scene class pattern');
+        } else {
+          console.warn('No Manim code could be extracted, returning text solution only');
+          manimCode = '';
+        }
       }
+    }
+
+    // If solution text is empty after extracting code blocks, provide a fallback message
+    if (!solution.trim() && manimCode) {
+      solution = 'A visual animation has been generated for this problem. Click "Generate Animation" below to watch the step-by-step explanation.';
+    } else if (!solution.trim() && !manimCode) {
+      solution = 'The AI did not return a solution. Please try again or rephrase your problem.';
     }
 
     return { //we don't experience any errors so we return the solution, manim code, and visualization description
@@ -342,7 +413,7 @@ async function validateAndProcessRequest(request: NextRequest): Promise<ProcessR
       }
       
       // Process with Azure OpenAI (uses GPT-4 Vision for images/PDFs)
-      return await processWithAzureOpenAI(combinedText, buffer);
+      return await processWithAzureOpenAI(combinedText, buffer, file.type);
 
     } catch (error) { //catches any errors that occur
       console.error('Error processing file:', error); //logs the error in terminal

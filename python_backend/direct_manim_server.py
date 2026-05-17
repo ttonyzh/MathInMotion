@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 import logging
 import subprocess
+import base64
 from pathlib import Path
 from .docker_manim_renderer import DockerManimRenderer
 import uuid
@@ -18,7 +19,8 @@ app = Flask(__name__)
 # Configure CORS to allow requests from the Next.js development server
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+        "origins": ["http://localhost:3000", "http://127.0.0.1:3000",
+                    "http://localhost:3001", "http://127.0.0.1:3001"],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True
@@ -64,7 +66,7 @@ def render_manim():
         
         # Write the code to a temporary file
         temp_file = os.path.join(temp_dir, f'render_{uuid.uuid4()}.py')
-        with open(temp_file, 'w') as f:
+        with open(temp_file, 'w', encoding='utf-8') as f:
             f.write(manim_code)
         
         try:
@@ -86,14 +88,15 @@ def render_manim():
             # Get the path to the rendered video
             video_path = render_result['video_path']
             logger.info(f"Successfully rendered video to: {video_path}")
-            
-            # Return the relative path to the video
-            relative_path = os.path.relpath(video_path, MEDIA_DIR)
-            
+
+            # Read video and encode as base64 to return directly
+            with open(video_path, 'rb') as f:
+                video_base64 = base64.b64encode(f.read()).decode('utf-8')
+
             # Create response with CORS headers
             response = jsonify({
                 'success': True,
-                'videoPath': relative_path,
+                'videoBase64': video_base64,
                 'message': 'Animation rendered successfully'
             })
             
