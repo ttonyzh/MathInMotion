@@ -3,6 +3,9 @@ import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
+// Allow this route up to 120 seconds (reasoning models can be slow)
+export const maxDuration = 120;
+
 // Define types for better type safety
 
 interface ProcessResponse {
@@ -188,27 +191,36 @@ Adapt the steps list to match the actual problem. Always show the operation appl
           content: userContent
         }
       ],
-      max_completion_tokens: 10000
+      max_completion_tokens: 4000
     };
 
     // Make the API request
     console.log('Sending request to Azure OpenAI with payload:', {
       url,
       messageCount: payload.messages.length,
-      hasImageContent: payload.messages.some(m => 
-        Array.isArray(m.content) && 
+      hasImageContent: payload.messages.some(m =>
+        Array.isArray(m.content) &&
         m.content.some(c => c.type === 'image_url')
       )
     });
 
-    const response = await fetch(url, {
-      method: 'POST', //Indicates that we are using the HTTP POST method
-      headers: {
-        'Content-Type': 'application/json',  //Indicates that we are sending JSON data
-        'api-key': apiKey //Indicates that we are using the API key for authentication
-      },
-      body: JSON.stringify(payload) //We specified before that we are sending a JSON object, but the payload is just a list, so stringifying it turns it into a JSON string
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': apiKey
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -340,7 +352,9 @@ Adapt the steps list to match the actual problem. Always show the operation appl
 
   } catch (error: unknown) { //catches any errors that occur
     console.error('Error processing request:', error); //logs the error in terminal
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'; //check what type the error is
+    const errorMessage = error instanceof Error
+      ? (error.name === 'AbortError' ? 'Request timed out after 90 seconds. The AI is taking too long — please try again.' : error.message)
+      : 'Unknown error';
     return { //return the error to the user
       success: false,
       solution: 'An unexpected error occurred while processing your request.', //returns a general error message to the user

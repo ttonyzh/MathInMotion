@@ -18,6 +18,14 @@ export default function Home() {
   // Practice problems
   const [practiceProblems, setPracticeProblems] = useState<string[]>([]);
   const [isLoadingPractice, setIsLoadingPractice] = useState(false);
+  const [showPractice, setShowPractice] = useState(false);
+
+  // Per-card inline videos: index → video url or "__error__"
+  const [practiceVideos, setPracticeVideos] = useState<Record<number, string>>({});
+  const [loadingPracticeVideo, setLoadingPracticeVideo] = useState<number | null>(null);
+
+  // Modal video player
+  const [modalVideo, setModalVideo] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -29,6 +37,10 @@ export default function Home() {
     setStatus("idle");
     setPracticeProblems([]);
     setIsLoadingPractice(false);
+    setShowPractice(false);
+    setPracticeVideos({});
+    setLoadingPracticeVideo(null);
+    setModalVideo(null);
   };
 
   const handleFileSelect = (file: File) => {
@@ -44,8 +56,6 @@ export default function Home() {
     if (e.dataTransfer.files[0]) handleFileSelect(e.dataTransfer.files[0]);
   };
 
-  // Accept an optional override so clicking a practice problem can pass text directly
-  // without waiting for state to update
   const handleSolve = async (overrideText?: string) => {
     const textToUse = overrideText ?? problemText;
     if (!uploadedFile && !textToUse.trim()) return;
@@ -55,13 +65,15 @@ export default function Home() {
     setErrorMsg(null);
     setPracticeProblems([]);
     setIsLoadingPractice(false);
+    setShowPractice(false);
+    setPracticeVideos({});
+    setLoadingPracticeVideo(null);
 
     const capturedProblem = textToUse.trim();
 
     try {
       // Step 1: Get Manim code from AI
       const formData = new FormData();
-      // Only attach the file if we're not overriding with a typed problem
       if (uploadedFile && !overrideText) formData.append("file", uploadedFile);
       if (textToUse.trim()) formData.append("problemText", textToUse.trim());
 
@@ -91,6 +103,7 @@ export default function Home() {
 
       setAnimationUrl(`data:video/mp4;base64,${renderData.videoBase64}`);
       setStatus("done");
+      setShowPractice(true);
       setIsLoadingPractice(true);
 
       // Step 3: Generate practice problems in background (non-blocking)
@@ -121,10 +134,33 @@ export default function Home() {
     }
   };
 
-  const handleTryPracticeProblem = (problem: string) => {
-    setProblemText(problem);
-    setUploadedFile(null);
-    handleSolve(problem);
+  // Generate an inline video for a specific practice card without replacing the main video
+  const handlePracticeVideoWalkthrough = async (problem: string, index: number) => {
+    if (loadingPracticeVideo !== null) return;
+    setLoadingPracticeVideo(index);
+    setPracticeVideos(prev => { const n = { ...prev }; delete n[index]; return n; });
+
+    try {
+      const formData = new FormData();
+      formData.append("problemText", problem);
+      const processRes = await fetch("/api/process-problem", { method: "POST", body: formData });
+      const processData = await processRes.json();
+      if (!processData.success || !processData.manimCode) throw new Error("Failed to generate code");
+
+      const renderRes = await fetch("/api/render-manim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ manimCode: processData.manimCode }),
+      });
+      const renderData = await renderRes.json();
+      if (!renderData.success || !renderData.videoBase64) throw new Error("Failed to render");
+
+      setPracticeVideos(prev => ({ ...prev, [index]: `data:video/mp4;base64,${renderData.videoBase64}` }));
+    } catch {
+      setPracticeVideos(prev => ({ ...prev, [index]: "__error__" }));
+    } finally {
+      setLoadingPracticeVideo(null);
+    }
   };
 
   const canSolve =
@@ -141,6 +177,7 @@ export default function Home() {
       <main className="flex-grow flex flex-col items-center px-4 py-12 gap-10">
 
         {/* Hero */}
+        {status !== "done" && (
         <div className="text-center max-w-2xl">
           <h1 className="text-4xl sm:text-5xl font-bold mb-3 tracking-tight">
             Visual STEM Tutor
@@ -149,8 +186,10 @@ export default function Home() {
             Upload a problem or type it below. We&apos;ll generate a step-by-step animated solution.
           </p>
         </div>
+        )}
 
         {/* Input Card */}
+        {status !== "done" && (
         <div className="w-full max-w-2xl bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col gap-5 shadow-xl">
 
           {/* File Upload */}
@@ -236,6 +275,7 @@ export default function Home() {
             Solve &amp; Animate
           </button>
         </div>
+        )}
 
         {/* Status / Results */}
         {status !== "idle" && (
@@ -277,17 +317,11 @@ export default function Home() {
               </div>
             )}
 
-            {/* Video */}
+            {/* Main Video */}
             {status === "done" && animationUrl && (
               <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
-                <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
+                <div className="px-5 py-4 border-b border-gray-800">
                   <p className="text-sm font-medium text-gray-300">Step-by-step Animation</p>
-                  <button
-                    onClick={() => { setStatus("idle"); setAnimationUrl(null); setUploadedFile(null); setProblemText(""); setPracticeProblems([]); setIsLoadingPractice(false); }}
-                    className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-                  >
-                    Solve another problem
-                  </button>
                 </div>
                 <div className="bg-black">
                   <video
@@ -296,10 +330,6 @@ export default function Home() {
                     autoPlay
                     loop
                     playsInline
-                    onError={() => {
-                      setErrorMsg("Failed to play the video. Please try again.");
-                      setStatus("error");
-                    }}
                   >
                     <source src={animationUrl} type="video/mp4" />
                   </video>
@@ -308,19 +338,52 @@ export default function Home() {
             )}
 
             {/* Practice Problems */}
-            {status === "done" && (isLoadingPractice || practiceProblems.length > 0) && (
+            {showPractice && (isLoadingPractice || practiceProblems.length > 0) && (
               <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Practice Problems</h3>
-                  {isLoadingPractice && (
-                    <div className="w-3.5 h-3.5 border border-gray-500 border-t-transparent rounded-full animate-spin" />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Practice Problems</h3>
+                    {isLoadingPractice && (
+                      <div className="w-3.5 h-3.5 border border-gray-500 border-t-transparent rounded-full animate-spin" />
+                    )}
+                  </div>
+                  {!isLoadingPractice && practiceProblems.length > 0 && practiceProblems[0] !== "__error__" && (
+                    <button
+                      onClick={() => {
+                        setPracticeProblems([]);
+                        setPracticeVideos({});
+                        setLoadingPracticeVideo(null);
+                        setIsLoadingPractice(true);
+                        const problemToUse = problemText.trim() || "a math problem";
+                        fetch("/api/generate-practice", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ originalProblem: problemToUse }),
+                        })
+                          .then((r) => r.json())
+                          .then((data) => {
+                            if (data.problems?.length > 0) {
+                              setPracticeProblems(data.problems);
+                            } else {
+                              setPracticeProblems(["__error__"]);
+                            }
+                          })
+                          .catch(() => setPracticeProblems(["__error__"]))
+                          .finally(() => setIsLoadingPractice(false));
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      New set
+                    </button>
                   )}
                 </div>
 
                 <div className="grid sm:grid-cols-3 gap-3">
                   {isLoadingPractice && practiceProblems.length === 0
-                    ? // Skeleton placeholders
-                      [0, 1, 2].map((i) => (
+                    ? [0, 1, 2].map((i) => (
                         <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl p-4 animate-pulse">
                           <div className="h-3 bg-gray-700 rounded mb-2 w-4/5" />
                           <div className="h-3 bg-gray-700 rounded mb-2 w-3/5" />
@@ -329,16 +392,17 @@ export default function Home() {
                         </div>
                       ))
                     : practiceProblems[0] === "__error__"
-                    ? // Error state — stayed visible instead of vanishing
-                      <div className="col-span-3 text-sm text-gray-500 py-2">
-                        Could not load practice problems. Check the browser console for details.
-                      </div>
+                    ? (
+                        <div className="col-span-3 text-sm text-gray-500 py-2">
+                          Could not load practice problems.
+                        </div>
+                      )
                     : practiceProblems.map((problem, i) => (
                         <div
                           key={i}
-                          className="bg-gray-900 border border-gray-800 hover:border-gray-600 rounded-xl p-4 flex flex-col gap-4 transition-colors group"
+                          className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-3 transition-colors"
                         >
-                          {/* Problem number badge */}
+                          {/* Problem number + text */}
                           <div className="flex items-start gap-2">
                             <span className="shrink-0 w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-xs flex items-center justify-center font-semibold mt-0.5">
                               {i + 1}
@@ -346,22 +410,90 @@ export default function Home() {
                             <p className="text-sm text-gray-300 leading-relaxed">{problem}</p>
                           </div>
 
-                          <button
-                            onClick={() => handleTryPracticeProblem(problem)}
-                            className="w-full py-2 rounded-lg text-sm font-medium transition-all
-                              bg-gray-800 hover:bg-blue-600 text-gray-400 hover:text-white
-                              border border-gray-700 hover:border-blue-500
-                              flex items-center justify-center gap-1.5"
-                          >
-                            Try it
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                            </svg>
-                          </button>
+                          {/* Button: generate → loading → See Video */}
+                          {practiceVideos[i] && practiceVideos[i] !== "__error__" ? (
+                            <button
+                              onClick={() => setModalVideo(practiceVideos[i])}
+                              className="w-full py-2 rounded-lg text-sm font-medium transition-all
+                                bg-green-600 hover:bg-green-500 text-white
+                                flex items-center justify-center gap-1.5"
+                            >
+                              See Video
+                              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
+                          ) : practiceVideos[i] === "__error__" ? (
+                            <button
+                              onClick={() => handlePracticeVideoWalkthrough(problem, i)}
+                              disabled={loadingPracticeVideo !== null}
+                              className="w-full py-2 rounded-lg text-sm font-medium transition-all
+                                bg-red-900/40 hover:bg-gray-800 text-red-400 hover:text-gray-400
+                                border border-red-800/50 hover:border-gray-700
+                                flex items-center justify-center gap-1.5
+                                disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Retry
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handlePracticeVideoWalkthrough(problem, i)}
+                              disabled={loadingPracticeVideo !== null}
+                              className="w-full py-2 rounded-lg text-sm font-medium transition-all
+                                bg-gray-800 hover:bg-blue-600 text-gray-400 hover:text-white
+                                border border-gray-700 hover:border-blue-500
+                                flex items-center justify-center gap-1.5
+                                disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {loadingPracticeVideo === i ? (
+                                <>
+                                  <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                                  Generating...
+                                </>
+                              ) : (
+                                <>
+                                  Video Walkthrough
+                                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                </>
+                              )}
+                            </button>
+                          )}
+
                         </div>
                       ))}
                 </div>
               </div>
+            )}
+
+            {/* Solve Another Problem */}
+            {status === "done" && (
+              <button
+                onClick={() => {
+                  setStatus("idle");
+                  setAnimationUrl(null);
+                  setUploadedFile(null);
+                  setProblemText("");
+                  setPracticeProblems([]);
+                  setIsLoadingPractice(false);
+                  setShowPractice(false);
+                  setPracticeVideos({});
+                  setLoadingPracticeVideo(null);
+                  setModalVideo(null);
+                }}
+                className="w-full py-3 rounded-xl font-semibold text-sm transition-all
+                  bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white
+                  border border-gray-700 hover:border-gray-500
+                  flex items-center justify-center gap-2"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Solve Another Problem
+              </button>
             )}
 
           </div>
@@ -413,6 +545,38 @@ export default function Home() {
       </main>
 
       <Footer />
+
+      {/* Video Modal */}
+      {modalVideo && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setModalVideo(null)}
+        >
+          <div
+            className="relative w-full max-w-4xl bg-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-gray-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
+              <p className="text-sm font-medium text-gray-300">Practice Problem — Step-by-step Solution</p>
+              <button
+                onClick={() => setModalVideo(null)}
+                className="text-gray-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-800"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* Video */}
+            <div className="bg-black">
+              <video className="w-full max-h-[75vh]" controls autoPlay loop playsInline>
+                <source src={modalVideo} type="video/mp4" />
+              </video>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

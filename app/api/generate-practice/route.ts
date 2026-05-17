@@ -31,24 +31,36 @@ export async function POST(request: NextRequest) {
           content: `Generate 3 practice problems similar to: "${originalProblem}". Return only a JSON array of 3 strings.`,
         },
       ],
-      max_completion_tokens: 300,
+      max_completion_tokens: 1500,
     };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': apiKey,
-      },
-      body: JSON.stringify(payload),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': apiKey,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
+      const errText = await response.text();
+      console.error('[generate-practice] API error:', response.status, errText);
       return NextResponse.json({ problems: [] });
     }
 
     const data = await response.json();
-    const content: string = data.choices[0]?.message?.content || '[]';
+    console.log('[generate-practice] raw response:', JSON.stringify(data?.choices?.[0]?.message));
+    const content: string = data.choices[0]?.message?.content || data.choices[0]?.message?.reasoning_content || '[]';
 
     // Extract JSON array from the response (handles surrounding text)
     let problems: string[] = [];
@@ -68,7 +80,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ problems });
 
-  } catch {
+  } catch (err) {
+    console.error('[generate-practice] caught error:', err);
     return NextResponse.json({ problems: [] });
   }
 }
