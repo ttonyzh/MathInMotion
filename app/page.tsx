@@ -338,11 +338,14 @@ export default function Home() {
         {/* Hero */}
         {status !== "done" && (
           <div className="text-center max-w-2xl">
-            <h1 className="text-4xl sm:text-5xl font-bold mb-3 tracking-tight">
-              Visual STEM Tutor
+            <span className="inline-block text-xs font-semibold uppercase tracking-widest text-blue-500 dark:text-blue-400 mb-3 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
+              AI-Powered STEM Learning
+            </span>
+            <h1 className="text-4xl sm:text-5xl font-bold mb-4 tracking-tight bg-gradient-to-br from-gray-900 via-blue-800 to-purple-800 dark:from-white dark:via-blue-200 dark:to-purple-300 bg-clip-text text-transparent">
+              Math, animated.
             </h1>
-            <p className="text-gray-500 dark:text-gray-400 text-lg">
-              Upload a problem or type it below. We&apos;ll generate a step-by-step animated solution.
+            <p className="text-gray-500 dark:text-gray-400 text-lg leading-relaxed">
+              Type or upload any math problem — MathInMotion generates a step-by-step animated video that shows you exactly how to solve it.
             </p>
           </div>
         )}
@@ -681,24 +684,68 @@ export default function Home() {
         )}
 
         {/* How It Works */}
-        <div className="w-full max-w-3xl mt-4">
-          <h2 className="text-center text-xl font-semibold text-gray-500 dark:text-gray-400 mb-6">How it works</h2>
-          <div className="grid sm:grid-cols-3 gap-4">
+        <div className="w-full max-w-4xl mt-6">
+          <div className="text-center mb-8">
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-500 dark:text-blue-400 mb-1">The Process</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">How it works</h2>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-5 relative">
+            {/* Connector line */}
+            <div className="hidden sm:block absolute top-9 left-[calc(33.33%+16px)] right-[calc(33.33%+16px)] h-px bg-gradient-to-r from-blue-400 via-purple-400 to-green-400 opacity-40" />
+
             {[
-              { step: "1", color: "blue", title: "Upload or Type", desc: "Submit a photo, PDF, or just type your STEM problem." },
-              { step: "2", color: "purple", title: "AI Analyzes", desc: "The AI reads and understands the problem, then writes animation code." },
-              { step: "3", color: "green", title: "Watch the Solution", desc: "A step-by-step animated video walks you through the answer." },
-            ].map(({ step, color, title, desc }) => (
-              <div key={step} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold mb-3 ${
-                  color === "blue" ? "bg-blue-500/20 text-blue-500 dark:text-blue-400"
-                  : color === "purple" ? "bg-purple-500/20 text-purple-500 dark:text-purple-400"
-                  : "bg-green-500/20 text-green-500 dark:text-green-400"
+              {
+                icon: (
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                ),
+                color: "blue",
+                title: "Upload or Type",
+                desc: "Submit a photo, PDF, or type your math problem in plain English. Algebra, calculus, geometry — anything.",
+              },
+              {
+                icon: (
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                ),
+                color: "purple",
+                title: "AI Figures It Out",
+                desc: "Our AI reads your problem, works through it step by step, and builds a personalized animation just for you.",
+              },
+              {
+                icon: (
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ),
+                color: "green",
+                title: "Watch & Learn",
+                desc: "A smooth animated video walks through every step of the answer, with a written breakdown you can read too.",
+              },
+            ].map(({ icon, color, title, desc }, i) => (
+              <div
+                key={i}
+                className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  color === "blue"   ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+                  : color === "purple" ? "bg-purple-500/15 text-purple-600 dark:text-purple-400"
+                  : "bg-green-500/15 text-green-600 dark:text-green-400"
                 }`}>
-                  {step}
+                  {icon}
                 </div>
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-1">{title}</h3>
-                <p className="text-sm text-gray-500">{desc}</p>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1">{title}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
+                </div>
+                <span className={`absolute top-4 right-4 text-xs font-bold tabular-nums ${
+                  color === "blue"   ? "text-blue-300 dark:text-blue-700"
+                  : color === "purple" ? "text-purple-300 dark:text-purple-700"
+                  : "text-green-300 dark:text-green-700"
+                }`}>0{i + 1}</span>
               </div>
             ))}
           </div>

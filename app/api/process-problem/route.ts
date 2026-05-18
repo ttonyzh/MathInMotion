@@ -12,10 +12,9 @@ interface ProcessResponse {
   success: boolean;
   solution: string;
   manimCode: string;
-  visualizationDescription?: string;
   error?: string;
-  suggestion?: string;  // User-friendly suggestions for resolving the issue
-  debugInfo?: {        // Additional debug information (only in development)
+  suggestion?: string;
+  debugInfo?: {
     error?: string;
     stack?: string;
     timestamp?: string;
@@ -45,21 +44,9 @@ async function processWithAzureOpenAI(text: string, imageBuffer?: Buffer, mimeTy
     if (!apiKey || !endpoint || !deploymentName) {
       throw new Error('Azure OpenAI credentials not properly configured. Please check your environment variables.');
     }
-    
-    // Log the configuration for debugging
-    console.log('Azure OpenAI Configuration:', {
-      endpoint,
-      deploymentName,
-      apiVersion,
-      hasApiKey: !!apiKey,
-      hasImageBuffer: !!imageBuffer,
-      imageBufferSize: imageBuffer ? imageBuffer.length : 0,
-      textContent: text ? text.substring(0, 100) + '...' : 'None'
-    });
-    
-    // Check if we're using a mini model which might not support vision. Not sure if I need this!!!
+
     if (deploymentName.includes('mini') && imageBuffer) {
-      console.warn('Warning: Using a "mini" model with image content. Mini models may not support vision capabilities.');
+      console.warn('Mini models may not support vision capabilities.');
     }
 
     // Prepare the request URL
@@ -100,16 +87,65 @@ CRITICAL ANIMATION RULES — follow these exactly:
 
 **Text**:
 - Use Text() for ALL text and equations. NEVER use MathTex() or Tex() — LaTeX is not installed.
-- Use font_size=36 for steps. If there are many steps, reduce to font_size=28 so they all fit on screen.
+- Choose font_size based on the number of steps in your list:
+  - 1–5 steps  → font_size=36
+  - 6–8 steps  → font_size=30
+  - 9–12 steps → font_size=26
+  - 13+ steps  → font_size=22
+
+**Math Notation — CRITICAL**:
+- NEVER use the ^ caret character for exponents. Instead use Unicode superscript characters directly inside the string:
+  - x^2  → "x²"      x^3  → "x³"      x^4  → "x⁴"      x^5  → "x⁵"
+  - x^6  → "x⁶"      x^7  → "x⁷"      x^8  → "x⁸"      x^9  → "x⁹"
+  - (x+1)^2 → "(x+1)²"    2^n → "2ⁿ"    10^3 → "10³"
+- Use √ for square root (not "sqrt()").
+- Use π for pi (not "pi").
+- Use × for multiplication in operation lines (not "*").
+- Fractions inside plain text (like coefficients): write as "1/2", "-3/4" etc. (slash notation is fine).
+
+**Stacked Fractions — d/dx, dy/dx, a/b displayed as proper fractions**:
+- When a step contains a derivative (d/dx, dy/dx, d²y/dx²) or any fraction that should render as a stacked visual fraction (numerator on top, denominator below a bar), do NOT write it as plain text. Use the make_frac class method (already included in the Required pattern below).
+- make_frac is defined as a method on the Scene class (indented under class SolveEquation(MovingCameraScene):).
+- Compute font_size BEFORE calling make_frac (count your total steps first). Build the VGroup step before the steps list, then place the finished VGroup object directly into the list — NOT as a tuple:
+\`\`\`python
+# 1. Count steps and compute font_size first
+total_n = 5  # replace with your actual step count
+font_size = 36 if total_n <= 5 else 30 if total_n <= 8 else 26 if total_n <= 12 else 22
+
+# 2. Pre-build the fraction step
+frac = self.make_frac("d", "dx", font_size, BLUE)
+rest = Text(" [x³] = 3x²", font_size=font_size, color=BLUE)
+rest.next_to(frac, RIGHT, buff=0.12)
+deriv_step = VGroup(frac, rest)
+
+# 3. Put it in the list as a bare Mobject (no tuple wrapper)
+steps = [
+    ("f(x) = x³", WHITE),
+    deriv_step,                  # ← bare VGroup, NOT ("...", COLOR)
+    ("f'(x) = 3x²", GREEN),
+]
+\`\`\`
+- The required loop (below) handles both tuples and bare Mobjects automatically.
+- For the final answer line, if it is a plain equation (e.g. "f'(x) = 3x²"), use normal Text() — only use make_frac when a visible stacked fraction is needed.
 
 **Colors**:
 - Use WHITE for all intermediate steps.
 - Use GREEN for the final answer text.
 - Use YELLOW for the SurroundingRectangle around the final answer.
 
-**Screen Boundaries**:
-- Keep all content within -6.5 to 6.5 horizontal and -3.5 to 3.5 vertical.
-- If steps risk going off the bottom, reduce font_size or add self.camera.frame.animate.shift(DOWN * n) to scroll.
+**Scene class — CRITICAL**:
+- ALWAYS inherit from MovingCameraScene, never plain Scene. This is required for camera scrolling to work.
+  Correct:   class SolveEquation(MovingCameraScene):
+  Wrong:     class SolveEquation(Scene):
+
+**Screen Boundaries — MANDATORY**:
+- All text must stay within x ∈ [-6, 6] horizontally. Never let a line be so long it clips off screen.
+- You MUST track the camera position and scroll automatically. Use this exact logic:
+  - Before the loop, set: camera_y = 0
+  - After writing each step, check: if step.get_bottom()[1] < camera_y - 3.2:
+      needed = (camera_y - 3.2) - step.get_bottom()[1] + 0.5
+      self.play(self.camera.frame.animate.shift(DOWN * needed), run_time=0.3)
+      camera_y -= needed
 
 **Imports**: Always start with:
 \`\`\`python
@@ -127,44 +163,85 @@ from manim import *
 - Operation lines (step 2, 4 above) use color=BLUE to visually distinguish them from result lines.
 - Result lines (step 1, 3, 5 above) use color=WHITE (or GREEN for the final answer).
 
+**Calculus — Derivatives (CRITICAL)**:
+- For ANY derivative problem, you MUST show the power rule applied to EACH TERM individually before combining.
+- Do NOT skip straight from f(x) to f'(x). Show every term's differentiation as its own BLUE step.
+- Example for f(x) = 3x³ - 2x² + x - 7:
+  1. "f(x) = 3x³ - 2x² + x - 7"  (WHITE)
+  2. "d/dx [3x³] = 3 × 3x² = 9x²"  (BLUE)  ← power rule on first term
+  3. "d/dx [-2x²] = -2 × 2x = -4x"  (BLUE)  ← power rule on second term
+  4. "d/dx [x] = 1"  (BLUE)  ← power rule on third term
+  5. "d/dx [-7] = 0"  (BLUE)  ← constant rule
+  6. "f'(x) = 9x² - 4x + 1"  (GREEN)  ← combine all results, final answer
+- For d/dx steps that include the bracket notation, use make_frac to render d/dx as a stacked fraction next to the bracketed term.
+
+**Calculus — Integrals (CRITICAL)**:
+- For ANY integral problem, show the power rule for integration applied to EACH TERM individually.
+- Example for ∫(4x³ + 2x)dx:
+  1. "∫(4x³ + 2x) dx"  (WHITE)
+  2. "∫4x³ dx = 4 × x⁴/4 = x⁴"  (BLUE)  ← integrate first term
+  3. "∫2x dx = 2 × x²/2 = x²"  (BLUE)  ← integrate second term
+  4. "∫(4x³ + 2x) dx = x⁴ + x² + C"  (GREEN)  ← combine, final answer
+
 **Required pattern — use this exact structure**:
 \`\`\`python
 from manim import *
 
-class SolveEquation(Scene):
+class SolveEquation(MovingCameraScene):
+    def make_frac(self, num_str, den_str, fs, color):
+        num = Text(num_str, font_size=fs, color=color)
+        den = Text(den_str, font_size=fs, color=color)
+        w = max(num.width, den.width) + 0.12
+        bar = Line(LEFT * w / 2, RIGHT * w / 2, color=color, stroke_width=2)
+        num.next_to(bar, UP, buff=0.07)
+        den.next_to(bar, DOWN, buff=0.07)
+        return VGroup(num, bar, den)
+
     def construct(self):
-        # Each tuple: (text, color)
-        # BLUE = operation applied to both sides, WHITE = simplified result, GREEN = final answer
+        # Steps list: each entry is either a ("text", COLOR) tuple or a pre-built Mobject.
+        # For calculus: pre-build fraction steps with make_frac and put them in as bare Mobjects.
         steps = [
             ("2x + 5 = 4", WHITE),
             ("2x + 5 - 5 = 4 - 5", BLUE),
             ("2x = -1", WHITE),
-            ("2x / 2 = -1 / 2", BLUE),
+            ("2x ÷ 2 = -1 ÷ 2", BLUE),
             ("x = -1/2", GREEN),
         ]
 
-        step_objects = []
+        n = len(steps)
+        font_size = 36 if n <= 5 else 30 if n <= 8 else 26 if n <= 12 else 22
 
-        for i, (step_text, color) in enumerate(steps):
-            step = Text(step_text, font_size=36, color=color)
+        step_objects = []
+        camera_y = 0
+
+        for i, step_data in enumerate(steps):
+            # Handle both ("text", color) tuples and pre-built Mobjects
+            if isinstance(step_data, tuple):
+                step = Text(step_data[0], font_size=font_size, color=step_data[1])
+            else:
+                step = step_data  # already a Mobject (VGroup etc.)
 
             if not step_objects:
                 step.to_corner(UL, buff=0.8)
             else:
-                step.next_to(step_objects[-1], DOWN, buff=0.4)
+                step.next_to(step_objects[-1], DOWN, buff=0.35)
                 step.align_to(step_objects[0], LEFT)
 
-            self.play(Write(step))
-            self.wait(0.5)
+            self.play(Write(step), run_time=0.6)
+            self.wait(0.4)
             step_objects.append(step)
 
-        # Box only the final answer
+            if step.get_bottom()[1] < camera_y - 3.2:
+                needed = (camera_y - 3.2) - step.get_bottom()[1] + 0.5
+                self.play(self.camera.frame.animate.shift(DOWN * needed), run_time=0.3)
+                camera_y -= needed
+
         final_box = SurroundingRectangle(step_objects[-1], color=YELLOW)
         self.play(Create(final_box))
         self.wait(2)
 \`\`\`
 
-Adapt the steps list to match the actual problem. Always show the operation applied to both sides (BLUE) before showing the simplified result (WHITE). The final answer is always GREEN with a YELLOW box.`;
+Adapt the steps list to match the actual problem. Always show the operation applied to both sides (BLUE) before showing the simplified result (WHITE). The final answer is always GREEN with a YELLOW box. Remember: no ^ carets — use ² ³ ⁴ etc. for exponents.`;
     
     // Add text content if available
     if (text) {
@@ -204,16 +281,6 @@ Adapt the steps list to match the actual problem. Always show the operation appl
       ],
       max_completion_tokens: 4000
     };
-
-    // Make the API request
-    console.log('Sending request to Azure OpenAI with payload:', {
-      url,
-      messageCount: payload.messages.length,
-      hasImageContent: payload.messages.some(m =>
-        Array.isArray(m.content) &&
-        m.content.some(c => c.type === 'image_url')
-      )
-    });
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
@@ -265,17 +332,11 @@ Adapt the steps list to match the actual problem. Always show the operation appl
       throw new Error(`Azure OpenAI API error: ${JSON.stringify(errorData)}`); //throws a general API error to the user via UI
     }
 
-    const data = await response.json(); //converts the response from Azure OpenAI to JSON so we can use it as a javascript object
-    
-    // Extract the solution text and Manim code from the response
-    console.log('Full API response:', JSON.stringify(data, null, 2)); //log full response to debug empty content
-    const AIGeneratedMessage = data.choices[0]?.message?.content || data.choices[0]?.message?.reasoning_content || ''; //gets the AI generated message from the response
-    console.log('Raw assistant message: \n\n', AIGeneratedMessage); //logs the AI generated message to the terminal
-    
-    // Parse the response to extract solution text, visualization description, and Manim code
+    const data = await response.json();
+    const AIGeneratedMessage = data.choices[0]?.message?.content || data.choices[0]?.message?.reasoning_content || '';
+
     let solution = AIGeneratedMessage;
     let manimCode = '';
-    let visualizationDescription = '';
     
     // Try different patterns to extract Manim code
     const codeBlockPatterns = [
@@ -294,7 +355,6 @@ Adapt the steps list to match the actual problem. Always show the operation appl
       const matches = [...AIGeneratedMessage.matchAll(pattern)]; //turns the matches into an array
       if (matches.length > 0) { //if we find matches
         manimCodeMatches = matches;
-        console.log(`Found ${manimCodeMatches.length} code blocks using pattern:`, pattern); //logs the number of code blocks found using the pattern and the pattern itself
         break;
       }
     }
@@ -310,8 +370,6 @@ Adapt the steps list to match the actual problem. Always show the operation appl
           manimCode = manimCode.split('\n').slice(1).join('\n').trim();
         }
 
-        console.log('Extracted Manim code: \n \n' + manimCode); //logs the extracted Manim code
-        
         // Remove all code blocks from the solution text
         for (const match of manimCodeMatches) {
           solution = solution.replace(match[0], ''); //removing the code blocks from the solution text. This keeps the solution text cleaner and shorter
@@ -327,19 +385,17 @@ Adapt the steps list to match the actual problem. Always show the operation appl
 
       // Fallback 1: The entire response IS the Manim script (no fences, starts with import)
       const looksLikeManimScript = /from\s+manim\s+import/.test(AIGeneratedMessage) &&
-        /class\s+\w+\s*\(\s*Scene\s*\)/.test(AIGeneratedMessage);
+        /class\s+\w+\s*\(\s*(?:\w+Scene|Scene)\s*\)/.test(AIGeneratedMessage);
 
       if (looksLikeManimScript) {
         manimCode = AIGeneratedMessage.trim();
-        solution = ''; // whole response is code, nothing left for solution text
-        console.log('Treating entire response as bare Manim script');
+        solution = '';
       } else {
         // Fallback 2: find a Scene class anywhere in the text
-        const sceneMatch = AIGeneratedMessage.match(/((?:from manim import[\s\S]*?)?class\s+\w+\s*\(\s*Scene\s*\)[\s\S]*)/);
+        const sceneMatch = AIGeneratedMessage.match(/((?:from manim import[\s\S]*?)?class\s+\w+\s*\(\s*(?:\w+Scene|Scene)\s*\)[\s\S]*)/);
         if (sceneMatch) {
           manimCode = sceneMatch[1].trim();
           solution = AIGeneratedMessage.slice(0, AIGeneratedMessage.indexOf(sceneMatch[1])).trim();
-          console.log('Extracted Manim code via Scene class pattern');
         } else {
           console.warn('No Manim code could be extracted, returning text solution only');
           manimCode = '';
@@ -354,46 +410,41 @@ Adapt the steps list to match the actual problem. Always show the operation appl
       solution = 'The AI did not return a solution. Please try again or rephrase your problem.';
     }
 
-    return { //we don't experience any errors so we return the solution, manim code, and visualization description
+    return {
       success: true,
       solution,
-      manimCode,
-      visualizationDescription
+      manimCode
     };
 
-  } catch (error: unknown) { //catches any errors that occur
-    console.error('Error processing request:', error); //logs the error in terminal
+  } catch (error: unknown) {
+    console.error('Error processing request:', error);
     const errorMessage = error instanceof Error
       ? (error.name === 'AbortError' ? 'Request timed out after 90 seconds. The AI is taking too long — please try again.' : error.message)
       : 'Unknown error';
-    return { //return the error to the user
+    return {
       success: false,
-      solution: 'An unexpected error occurred while processing your request.', //returns a general error message to the user
+      solution: 'An unexpected error occurred while processing your request.',
       manimCode: '',
-      visualizationDescription: '',
       error: errorMessage
     };
   }
 }
 
-async function validateAndProcessRequest(request: NextRequest): Promise<ProcessResponse> { //function that returns a promise. Function takes in request of type NextRequest, and returns a promise of type ProcessResponse
-  const formData = await request.formData(); //gets the form data from the request
-  const file = formData.get('file') as File | null; //gets the file from the form data
-  const problemText = formData.get('problemText') as string | null; //gets the problem text from the form data
-  
-  // Validate input: checking if the user has uploaded a file or provided problem text
+async function validateAndProcessRequest(request: NextRequest): Promise<ProcessResponse> {
+  const formData = await request.formData();
+  const file = formData.get('file') as File | null;
+  const problemText = formData.get('problemText') as string | null;
+
   if (!file && !problemText?.trim()) {
-    return { //return an error to the user
+    return {
       success: false,
       solution: '',
       manimCode: '',
       error: 'Either a file or problem text is required'
     };
   }
-  
-  // Handle file upload if present
+
   if (file) {
-    // Validate file type: checking if the file is a PDF, image, or text file
     if (!ALLOWED_FILE_TYPES.includes(file.type)) {
       return {
         success: false,
@@ -402,8 +453,7 @@ async function validateAndProcessRequest(request: NextRequest): Promise<ProcessR
         error: `Unsupported file type. Allowed types: ${ALLOWED_FILE_TYPES.join(', ')}`
       };
     }
-    
-    // Validate file size: checking if the file is too large
+
     if (file.size > MAX_FILE_SIZE) {
       return {
         success: false,
@@ -412,70 +462,60 @@ async function validateAndProcessRequest(request: NextRequest): Promise<ProcessR
         error: `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`
       };
     }
-    
-    const bytes: ArrayBuffer = await file.arrayBuffer(); //converts the file to a arrayBuffer
-    const buffer:Buffer = Buffer.from(bytes); //converts the arrayBuffer to a buffer. Buffers are what are used in node.js 
-    
-    try { //try to process the file
-      // Create uploads directory if it doesn't exist
-      const uploadDir:string = join(process.cwd(), UPLOAD_DIR);
+
+    const bytes: ArrayBuffer = await file.arrayBuffer();
+    const buffer: Buffer = Buffer.from(bytes);
+
+    try {
+      const uploadDir: string = join(process.cwd(), UPLOAD_DIR);
       await mkdir(uploadDir, { recursive: true });
-      
-      // Save the file with a unique name
-      const uniqueId:string = uuidv4(); //generates a unique id for the file
-      const filename:string = `${uniqueId}-${file.name.replace(/[^\w.]+/g, '-')}`; //removes any special characters from the file name
-      const filepath:string = join(uploadDir, filename); //joins the upload directory and the file name
-      await writeFile(filepath, buffer); //writes the file to the upload directory
-      
-      // Add context about the file type to help the AI
-      const fileContext:string = `This is a ${file.type} file containing a STEM problem that needs to be solved and visualized.`;
-      
-      // Initialize combinedText with the file context
-      let combinedText:string = fileContext;
-      // If there's additional problem text, append it with some spacing
+
+      const uniqueId: string = uuidv4();
+      const filename: string = `${uniqueId}-${file.name.replace(/[^\w.]+/g, '-')}`;
+      const filepath: string = join(uploadDir, filename);
+      await writeFile(filepath, buffer);
+
+      const fileContext: string = `This is a ${file.type} file containing a STEM problem that needs to be solved and visualized.`;
+      let combinedText: string = fileContext;
       if (problemText?.trim()) {
         combinedText = `${fileContext}\n\n${problemText}`;
       }
-      
-      // Process with Azure OpenAI (uses GPT-4 Vision for images/PDFs)
+
       return await processWithAzureOpenAI(combinedText, buffer, file.type);
 
-    } catch (error) { //catches any errors that occur
-      console.error('Error processing file:', error); //logs the error in terminal
-      return { //returns an error to the user
+    } catch (error) {
+      console.error('Error processing file:', error);
+      return {
         success: false,
         solution: '',
         manimCode: '',
-        error: "Failed to process the uploaded file. Didn't even get to the processing stage with Azure openAI"
+        error: 'Failed to process the uploaded file.'
       };
     }
-  } else { //if no file was uploaded, process the text-only problem
-    // Process text-only problem
+  } else {
     try {
-      return await processWithAzureOpenAI(problemText!.trim())
-    } catch (error) { //catches any errors that occur
-      console.error('Error processing text problem:', error); //logs the error in terminal
-      return { //returns an error to the user
+      return await processWithAzureOpenAI(problemText!.trim());
+    } catch (error) {
+      console.error('Error processing text problem:', error);
+      return {
         success: false,
         solution: '',
         manimCode: '',
-        error: 'Failed to process the problem text. Didn\'t even get to the processing stage with Azure openAI'
+        error: 'Failed to process the problem text.'
       };
     }
   }
 }
 
-export async function POST(request: NextRequest) { //exports the POST function
+export async function POST(request: NextRequest) {
   try {
-    const result = await validateAndProcessRequest(request); //calls the validateAndProcessRequest function
-    
-    if (result.success) { //if the request was successful
+    const result = await validateAndProcessRequest(request);
+
+    if (result.success) {
       return NextResponse.json({
         success: true,
         solution: result.solution,
         manimCode: result.manimCode,
-        visualizationDescription: result.visualizationDescription,
-        error: undefined // Explicitly set to undefined to match the type
       } as ProcessResponse);
     } else {
       // Return error response with 400 status

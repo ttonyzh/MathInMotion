@@ -4,9 +4,7 @@ import os
 import logging
 import subprocess
 import base64
-from pathlib import Path
 from .docker_manim_renderer import DockerManimRenderer
-import uuid
 
 # Configure logging
 logging.basicConfig(
@@ -58,61 +56,36 @@ def render_manim():
             return jsonify({'error': 'No Manim code provided'}), 400
         
         logger.info("Received Manim code for rendering")
-        logger.debug(f"Manim code: {manim_code[:200]}...")  # Log first 200 chars to avoid huge logs
-        
-        # Create a temporary file to store the code
-        temp_dir = os.path.join(MEDIA_DIR, 'temp')
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        # Write the code to a temporary file
-        temp_file = os.path.join(temp_dir, f'render_{uuid.uuid4()}.py')
-        with open(temp_file, 'w', encoding='utf-8') as f:
-            f.write(manim_code)
-        
-        try:
-            # Use the Docker-based renderer
-            render_result = manim_renderer.render_manim_code(manim_code)
-            
-            if not render_result['success']:
-                error_msg = render_result.get('error', 'Unknown error during rendering')
-                logger.error(f"Failed to render animation: {error_msg}")
-                response = jsonify({
-                    'success': False,
-                    'error': error_msg
-                })
-                response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
-                response.headers.add('Access-Control-Allow-Credentials', 'true')
-                response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-                return response, 500
-            
-            # Get the path to the rendered video
-            video_path = render_result['video_path']
-            logger.info(f"Successfully rendered video to: {video_path}")
 
-            # Read video and encode as base64 to return directly
-            with open(video_path, 'rb') as f:
-                video_base64 = base64.b64encode(f.read()).decode('utf-8')
+        render_result = manim_renderer.render_manim_code(manim_code)
 
-            # Create response with CORS headers
+        if not render_result['success']:
+            error_msg = render_result.get('error', 'Unknown error during rendering')
+            logger.error(f"Failed to render animation: {error_msg}")
             response = jsonify({
-                'success': True,
-                'videoBase64': video_base64,
-                'message': 'Animation rendered successfully'
+                'success': False,
+                'error': error_msg
             })
-            
-            # Add CORS headers
             response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
             response.headers.add('Access-Control-Allow-Credentials', 'true')
             response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-            return response
-            
-        finally:
-            # Clean up the temporary file
-            try:
-                if os.path.exists(temp_file):
-                    os.remove(temp_file)
-            except Exception as e:
-                logger.warning(f"Failed to clean up temporary file: {e}")
+            return response, 500
+
+        video_path = render_result['video_path']
+        logger.info(f"Successfully rendered video to: {video_path}")
+
+        with open(video_path, 'rb') as f:
+            video_base64 = base64.b64encode(f.read()).decode('utf-8')
+
+        response = jsonify({
+            'success': True,
+            'videoBase64': video_base64,
+            'message': 'Animation rendered successfully'
+        })
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        return response
     
     except Exception as e:
         error_msg = f'Failed to render animation: {str(e)}'

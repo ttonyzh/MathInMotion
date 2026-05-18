@@ -59,7 +59,6 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-    console.log('[generate-practice] raw response:', JSON.stringify(data?.choices?.[0]?.message));
     const content: string = data.choices[0]?.message?.content || data.choices[0]?.message?.reasoning_content || '[]';
 
     // Extract JSON array from the response (handles surrounding text)

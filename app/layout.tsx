@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tutor AI",
-  description: "Visual STEM Tutor — generate step-by-step animated solutions",
+  title: "MathInMotion",
+  description: "Animated STEM solutions — generate step-by-step visual explanations",
 };
 
 export default function RootLayout({

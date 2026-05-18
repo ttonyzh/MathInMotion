@@ -25,9 +25,62 @@ class DockerManimRenderer:
 
     def detect_scene_class(self, manim_code):
         """Detect the scene class name from the Manim code."""
-        scene_pattern = r'class\s+(\w+)\s*\(\s*Scene\s*\)'
+        scene_pattern = r'class\s+(\w+)\s*\(\s*(?:\w+Scene|Scene)\s*\)'
         match = re.search(scene_pattern, manim_code)
         return match.group(1) if match else None
+
+    def fix_manim_code(self, manim_code):
+        """Auto-fix common AI code generation errors before rendering."""
+
+        # Fix 1: Replace old tuple-unpacking loop with isinstance-safe version.
+        # Old: for i, (step_text, color) in enumerate(steps):
+        #          step = Text(step_text, font_size=FSVAR, color=color)
+        # New: for i, _step_data in enumerate(steps):
+        #          if isinstance(_step_data, tuple):
+        #              step = Text(_step_data[0], font_size=FSVAR, color=_step_data[1])
+        #          else:
+        #              step = _step_data
+        loop_pattern = re.compile(
+            r'^([ \t]*)for\s+\w+\s*,\s*\(\s*\w+\s*,\s*\w+\s*\)\s+in\s+enumerate\(\s*steps\s*\)\s*:\n'
+            r'([ \t]*)step\s*=\s*Text\(([^\n]+)\)',
+            re.MULTILINE
+        )
+
+        def replace_loop(m):
+            outer_indent = m.group(1)
+            inner_indent = m.group(2)
+            text_args = m.group(3)
+            fs_match = re.search(r'font_size\s*=\s*(\w+)', text_args)
+            fs_var = fs_match.group(1) if fs_match else 'font_size'
+            return (
+                f'{outer_indent}for _i, _step_data in enumerate(steps):\n'
+                f'{inner_indent}if isinstance(_step_data, tuple):\n'
+                f'{inner_indent}    _s0 = _step_data[0]\n'
+                f'{inner_indent}    if isinstance(_s0, str):\n'
+                f'{inner_indent}        step = Text(_s0, font_size={fs_var}, color=_step_data[1])\n'
+                f'{inner_indent}    else:\n'
+                f'{inner_indent}        step = _s0\n'
+                f'{inner_indent}else:\n'
+                f'{inner_indent}    step = _step_data'
+            )
+
+        manim_code = loop_pattern.sub(replace_loop, manim_code)
+
+        # Fix 2: Replace MathTex/Tex (requires LaTeX, not installed) with Text.
+        manim_code = re.sub(r'\bMathTex\s*\(', 'Text(', manim_code)
+        manim_code = re.sub(r'\bTex\s*\(', 'Text(', manim_code)
+
+        # Fix 3: Strip raw-string prefixes on Text() strings (r"..." → "...").
+        manim_code = re.sub(r'\bText\s*\(\s*r(["\'])', r'Text(\1', manim_code)
+
+        # Fix 4: Replace Scene base class with MovingCameraScene for camera scroll support.
+        manim_code = re.sub(
+            r'class\s+(\w+)\s*\(\s*Scene\s*\)',
+            r'class \1(MovingCameraScene)',
+            manim_code
+        )
+
+        return manim_code
 
     def render_manim_code(self, manim_code):
         """
@@ -46,11 +99,7 @@ class DockerManimRenderer:
         replacement = 'rect = SurroundingRectangle(\n            self.play(Create(rect))\n            rect = '
         manim_code = re.sub(pattern, replacement, manim_code)
 
-        print("\n" + "="*80)
-        print("GENERATED MANIM CODE:")
-        print("="*80)
-        print(manim_code)
-        print("="*80 + "\n")
+        manim_code = self.fix_manim_code(manim_code)
 
         try:
             render_id = str(uuid.uuid4())
