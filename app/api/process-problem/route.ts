@@ -73,6 +73,17 @@ async function processWithAzureOpenAI(text: string, imageBuffer?: Buffer, mimeTy
 1. Read and understand the STEM problem. If an image or PDF is provided, use OCR to extract the problem. If plain text is provided, use it directly.
 2. Analyze the STEM problem and provide a clear, step-by-step solution as Python Manim code.
 
+**REQUIRED OUTPUT FORMAT — follow this structure exactly**:
+First, write a plain-text explanation of the solution (3-5 sentences). Describe each step in plain English — what operation is applied, why, and what the result is. Do NOT include any code or math notation in this section, just clear prose.
+Then, on a new line, provide the complete Manim code in a Python code block.
+
+Example output structure:
+To solve 2x + 5 = 4, we start by subtracting 5 from both sides to isolate the term with x, giving 2x = -1. Next, we divide both sides by 2 to fully isolate x. This gives us x = -1/2 as the final answer.
+
+\`\`\`python
+[Manim code here]
+\`\`\`
+
 CRITICAL ANIMATION RULES — follow these exactly:
 
 **Cascading Step Display**:

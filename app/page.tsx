@@ -6,6 +6,32 @@ import Footer from "./components/layout/Footer";
 
 type Status = "idle" | "processing" | "rendering" | "done" | "error";
 
+interface HistoryEntry {
+  text: string;
+  timestamp: number;
+}
+
+function parseSolutionSteps(text: string): string[] {
+  // Try newlines first (if AI used line breaks between steps)
+  const byNewline = text.split('\n').map(s => s.trim()).filter(Boolean);
+  if (byNewline.length > 1) return byNewline;
+  // Fall back to splitting by sentence-ending punctuation
+  const bySentence = text.match(/[^.!?]+[.!?]+/g);
+  if (bySentence && bySentence.length > 1) return bySentence.map(s => s.trim()).filter(Boolean);
+  return [text];
+}
+
+function timeAgo(ts: number): string {
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  const h = Math.floor(diff / 3600000);
+  const d = Math.floor(diff / 86400000);
+  if (m < 1) return "Just now";
+  if (m < 60) return `${m}m ago`;
+  if (h < 24) return `${h}h ago`;
+  return `${d}d ago`;
+}
+
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
@@ -14,6 +40,10 @@ export default function Home() {
   const [problemText, setProblemText] = useState("");
   const [animationUrl, setAnimationUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Written explanation
+  const [solutionText, setSolutionText] = useState<string | null>(null);
+  const [showSolution, setShowSolution] = useState(true);
 
   // Practice problems
   const [practiceProblems, setPracticeProblems] = useState<string[]>([]);
@@ -27,14 +57,51 @@ export default function Home() {
   // Modal video player
   const [modalVideo, setModalVideo] = useState<string | null>(null);
 
+  // Problem history
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setIsMounted(true); }, []);
+  useEffect(() => {
+    setIsMounted(true);
+    try {
+      const saved = localStorage.getItem("tutor-history");
+      if (saved) setHistory(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  const saveToHistory = (text: string) => {
+    if (!text.trim()) return; // don't save file-only solves with no text
+    try {
+      const saved = localStorage.getItem("tutor-history");
+      const existing: HistoryEntry[] = JSON.parse(saved || "[]");
+      const updated = [
+        { text, timestamp: Date.now() },
+        ...existing.filter((h) => h.text !== text),
+      ].slice(0, 20);
+      setHistory(updated);
+      localStorage.setItem("tutor-history", JSON.stringify(updated));
+    } catch {}
+  };
+
+  const deleteFromHistory = (timestamp: number) => {
+    const updated = history.filter((h) => h.timestamp !== timestamp);
+    setHistory(updated);
+    localStorage.setItem("tutor-history", JSON.stringify(updated));
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+    localStorage.removeItem("tutor-history");
+  };
 
   const resetState = () => {
     setAnimationUrl(null);
     setErrorMsg(null);
     setStatus("idle");
+    setSolutionText(null);
+    setShowSolution(true);
     setPracticeProblems([]);
     setIsLoadingPractice(false);
     setShowPractice(false);
@@ -63,6 +130,8 @@ export default function Home() {
     setStatus("processing");
     setAnimationUrl(null);
     setErrorMsg(null);
+    setSolutionText(null);
+    setShowSolution(true);
     setPracticeProblems([]);
     setIsLoadingPractice(false);
     setShowPractice(false);
@@ -87,6 +156,9 @@ export default function Home() {
         throw new Error(processData.error || "Failed to generate animation code. Please try again.");
       }
 
+      // Capture solution text from Step 1
+      const solutionFromAPI: string | null = processData.solution?.trim() || null;
+
       // Step 2: Render the animation
       setStatus("rendering");
 
@@ -103,8 +175,10 @@ export default function Home() {
 
       setAnimationUrl(`data:video/mp4;base64,${renderData.videoBase64}`);
       setStatus("done");
+      setSolutionText(solutionFromAPI);
       setShowPractice(true);
       setIsLoadingPractice(true);
+      saveToHistory(capturedProblem);
 
       // Step 3: Generate practice problems in background (non-blocking)
       const problemToUse = capturedProblem || "a math problem";
@@ -115,17 +189,13 @@ export default function Home() {
       })
         .then((r) => r.json())
         .then((data) => {
-          console.log("[practice] response:", data);
           if (data.problems?.length > 0) {
             setPracticeProblems(data.problems);
           } else {
             setPracticeProblems(["__error__"]);
           }
         })
-        .catch((err) => {
-          console.error("[practice] fetch error:", err);
-          setPracticeProblems(["__error__"]);
-        })
+        .catch(() => setPracticeProblems(["__error__"]))
         .finally(() => setIsLoadingPractice(false));
 
     } catch (err) {
@@ -134,7 +204,6 @@ export default function Home() {
     }
   };
 
-  // Generate an inline video for a specific practice card without replacing the main video
   const handlePracticeVideoWalkthrough = async (problem: string, index: number) => {
     if (loadingPracticeVideo !== null) return;
     setLoadingPracticeVideo(index);
@@ -172,109 +241,206 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white">
-      <Header />
+
+      {/* History sidebar backdrop */}
+      {isHistoryOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+          onClick={() => setIsHistoryOpen(false)}
+        />
+      )}
+
+      {/* History sidebar panel */}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 w-72 flex flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-2xl transition-transform duration-300 ${
+          isHistoryOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* Sidebar header */}
+        <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
+          <div className="flex items-center gap-2">
+            <svg className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Problem History</h2>
+          </div>
+          <div className="flex items-center gap-1">
+            {history.length > 0 && (
+              <button
+                onClick={clearHistory}
+                className="text-xs text-gray-400 hover:text-red-400 transition-colors px-2 py-1 rounded"
+              >
+                Clear all
+              </button>
+            )}
+            <button
+              onClick={() => setIsHistoryOpen(false)}
+              className="p-1 text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Sidebar items */}
+        <div className="flex-1 overflow-y-auto py-2">
+          {history.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <svg className="h-8 w-8 text-gray-300 dark:text-gray-700 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm text-gray-400 dark:text-gray-600">No problems solved yet</p>
+            </div>
+          ) : (
+            history.map((item) => (
+              <div key={item.timestamp} className="group px-2 py-0.5">
+                <div
+                  className="flex items-start gap-2 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
+                  onClick={() => {
+                    setIsHistoryOpen(false);
+                    setProblemText(item.text);
+                    handleSolve(item.text);
+                  }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-200 leading-snug">
+                      {item.text
+                        ? item.text.length > 72 ? item.text.slice(0, 72).trimEnd() + "…" : item.text
+                        : "[File upload]"}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">{timeAgo(item.timestamp)}</p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteFromHistory(item.timestamp); }}
+                    className="shrink-0 opacity-0 group-hover:opacity-100 p-1 text-gray-300 dark:text-gray-600 hover:text-red-400 rounded transition-all mt-0.5"
+                    title="Remove"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <Header
+        onHistoryClick={() => setIsHistoryOpen(true)}
+        historyCount={history.length}
+      />
 
       <main className="flex-grow flex flex-col items-center px-4 py-12 gap-10">
 
         {/* Hero */}
         {status !== "done" && (
-        <div className="text-center max-w-2xl">
-          <h1 className="text-4xl sm:text-5xl font-bold mb-3 tracking-tight">
-            Visual STEM Tutor
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 text-lg">
-            Upload a problem or type it below. We&apos;ll generate a step-by-step animated solution.
-          </p>
-        </div>
+          <div className="text-center max-w-2xl">
+            <h1 className="text-4xl sm:text-5xl font-bold mb-3 tracking-tight">
+              Visual STEM Tutor
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400 text-lg">
+              Upload a problem or type it below. We&apos;ll generate a step-by-step animated solution.
+            </p>
+          </div>
         )}
 
         {/* Input Card */}
         {status !== "done" && (
-        <div className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col gap-5 shadow-xl">
+          <div className="w-full max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col gap-5 shadow-xl">
 
-          {/* File Upload */}
-          <div>
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Upload a file (optional)</p>
-            <div
-              className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors ${
-                isDragging
-                  ? "border-blue-500 bg-blue-500/10"
-                  : uploadedFile
-                  ? "border-green-500 bg-green-500/10"
-                  : "border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
-              }`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {uploadedFile ? (
-                <div className="flex items-center gap-3">
-                  <svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{uploadedFile.name}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{(uploadedFile.size / 1024).toFixed(1)} KB</p>
-                  </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setUploadedFile(null); resetState(); }}
-                    className="ml-2 text-gray-400 hover:text-red-400 transition-colors"
-                    title="Remove file"
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            {/* File Upload */}
+            <div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Upload a file (optional)</p>
+              <div
+                className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors ${
+                  isDragging
+                    ? "border-blue-500 bg-blue-500/10"
+                    : uploadedFile
+                    ? "border-green-500 bg-green-500/10"
+                    : "border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploadedFile ? (
+                  <div className="flex items-center gap-3">
+                    <svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <svg className="h-8 w-8 text-gray-400 dark:text-gray-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Drag & drop or <span className="text-blue-500 dark:text-blue-400">browse</span></p>
-                  <p className="text-xs text-gray-400 dark:text-gray-600 mt-1">PDF, JPG, PNG</p>
-                </>
-              )}
-              <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); }}
-              />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{uploadedFile.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{(uploadedFile.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setUploadedFile(null); resetState(); }}
+                      className="ml-2 text-gray-400 hover:text-red-400 transition-colors"
+                      title="Remove file"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <svg className="h-8 w-8 text-gray-400 dark:text-gray-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Drag & drop or <span className="text-blue-500 dark:text-blue-400">browse</span></p>
+                    <p className="text-xs text-gray-400 dark:text-gray-600 mt-1">PDF, JPG, PNG</p>
+                  </>
+                )}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); }}
+                />
+              </div>
             </div>
+
+            {/* Hint: add text so file uploads get saved to history */}
+            {uploadedFile && !problemText.trim() && (
+              <p className="text-xs text-amber-500 dark:text-amber-400 -mt-1">
+                Tip: type a short description below so this problem gets saved to history.
+              </p>
+            )}
+
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
+              <span className="text-xs text-gray-400 dark:text-gray-600 uppercase tracking-wider">or type your problem</span>
+              <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
+            </div>
+
+            {/* Text Input */}
+            <textarea
+              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none transition-colors"
+              rows={4}
+              placeholder="e.g. Solve for x: 2x + 5 = 4"
+              value={problemText}
+              onChange={(e) => { setProblemText(e.target.value); resetState(); }}
+            />
+
+            {/* Submit Button */}
+            <button
+              onClick={() => handleSolve()}
+              disabled={!canSolve}
+              className={`w-full py-3 rounded-xl font-semibold text-sm transition-all ${
+                canSolve
+                  ? "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20"
+                  : "bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed"
+              }`}
+            >
+              Solve &amp; Animate
+            </button>
           </div>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
-            <span className="text-xs text-gray-400 dark:text-gray-600 uppercase tracking-wider">or type your problem</span>
-            <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
-          </div>
-
-          {/* Text Input */}
-          <textarea
-            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none transition-colors"
-            rows={4}
-            placeholder="e.g. Solve for x: 2x + 5 = 4"
-            value={problemText}
-            onChange={(e) => { setProblemText(e.target.value); resetState(); }}
-          />
-
-          {/* Submit Button */}
-          <button
-            onClick={() => handleSolve()}
-            disabled={!canSolve}
-            className={`w-full py-3 rounded-xl font-semibold text-sm transition-all ${
-              canSolve
-                ? "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20"
-                : "bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed"
-            }`}
-          >
-            Solve &amp; Animate
-          </button>
-        </div>
         )}
 
         {/* Status / Results */}
@@ -324,16 +490,45 @@ export default function Home() {
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Step-by-step Animation</p>
                 </div>
                 <div className="bg-black">
-                  <video
-                    className="w-full"
-                    controls
-                    autoPlay
-                    loop
-                    playsInline
-                  >
+                  <video className="w-full" controls autoPlay loop playsInline>
                     <source src={animationUrl} type="video/mp4" />
                   </video>
                 </div>
+              </div>
+            )}
+
+            {/* Written Explanation */}
+            {status === "done" && solutionText && (
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden">
+                <button
+                  onClick={() => setShowSolution(!showSolution)}
+                  className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Written Explanation</p>
+                  </div>
+                  <svg
+                    className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${showSolution ? "rotate-180" : ""}`}
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showSolution && (
+                  <div className="px-5 pb-5 flex flex-col gap-3">
+                    {parseSolutionSteps(solutionText).map((step, i) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-violet-500/20 text-violet-500 dark:text-violet-400 text-xs flex items-center justify-center font-semibold mt-0.5">
+                          {i + 1}
+                        </span>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -402,7 +597,6 @@ export default function Home() {
                           key={i}
                           className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex flex-col gap-3 transition-colors"
                         >
-                          {/* Problem number + text */}
                           <div className="flex items-start gap-2">
                             <span className="shrink-0 w-5 h-5 rounded-full bg-blue-500/20 text-blue-500 dark:text-blue-400 text-xs flex items-center justify-center font-semibold mt-0.5">
                               {i + 1}
@@ -410,13 +604,10 @@ export default function Home() {
                             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{problem}</p>
                           </div>
 
-                          {/* Button: generate → loading → See Video */}
                           {practiceVideos[i] && practiceVideos[i] !== "__error__" ? (
                             <button
                               onClick={() => setModalVideo(practiceVideos[i])}
-                              className="w-full py-2 rounded-lg text-sm font-medium transition-all
-                                bg-green-600 hover:bg-green-500 text-white
-                                flex items-center justify-center gap-1.5"
+                              className="w-full py-2 rounded-lg text-sm font-medium transition-all bg-green-600 hover:bg-green-500 text-white flex items-center justify-center gap-1.5"
                             >
                               See Video
                               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -428,11 +619,7 @@ export default function Home() {
                             <button
                               onClick={() => handlePracticeVideoWalkthrough(problem, i)}
                               disabled={loadingPracticeVideo !== null}
-                              className="w-full py-2 rounded-lg text-sm font-medium transition-all
-                                bg-red-900/40 hover:bg-gray-100 dark:hover:bg-gray-800 text-red-400 hover:text-gray-500 dark:hover:text-gray-400
-                                border border-red-800/50 hover:border-gray-200 dark:hover:border-gray-700
-                                flex items-center justify-center gap-1.5
-                                disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="w-full py-2 rounded-lg text-sm font-medium transition-all bg-red-900/40 hover:bg-gray-100 dark:hover:bg-gray-800 text-red-400 hover:text-gray-500 dark:hover:text-gray-400 border border-red-800/50 hover:border-gray-200 dark:hover:border-gray-700 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Retry
                             </button>
@@ -440,11 +627,7 @@ export default function Home() {
                             <button
                               onClick={() => handlePracticeVideoWalkthrough(problem, i)}
                               disabled={loadingPracticeVideo !== null}
-                              className="w-full py-2 rounded-lg text-sm font-medium transition-all
-                                bg-gray-100 dark:bg-gray-800 hover:bg-blue-600 text-gray-600 dark:text-gray-400 hover:text-white
-                                border border-gray-200 dark:border-gray-700 hover:border-blue-500
-                                flex items-center justify-center gap-1.5
-                                disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="w-full py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 dark:bg-gray-800 hover:bg-blue-600 text-gray-600 dark:text-gray-400 hover:text-white border border-gray-200 dark:border-gray-700 hover:border-blue-500 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {loadingPracticeVideo === i ? (
                                 <>
@@ -462,7 +645,6 @@ export default function Home() {
                               )}
                             </button>
                           )}
-
                         </div>
                       ))}
                 </div>
@@ -477,6 +659,8 @@ export default function Home() {
                   setAnimationUrl(null);
                   setUploadedFile(null);
                   setProblemText("");
+                  setSolutionText(null);
+                  setShowSolution(true);
                   setPracticeProblems([]);
                   setIsLoadingPractice(false);
                   setShowPractice(false);
@@ -484,11 +668,7 @@ export default function Home() {
                   setLoadingPracticeVideo(null);
                   setModalVideo(null);
                 }}
-                className="w-full py-3 rounded-xl font-semibold text-sm transition-all
-                  bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700
-                  text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white
-                  border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500
-                  flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-xl font-semibold text-sm transition-all bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500 flex items-center justify-center gap-2"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -505,35 +685,16 @@ export default function Home() {
           <h2 className="text-center text-xl font-semibold text-gray-500 dark:text-gray-400 mb-6">How it works</h2>
           <div className="grid sm:grid-cols-3 gap-4">
             {[
-              {
-                step: "1",
-                color: "blue",
-                title: "Upload or Type",
-                desc: "Submit a photo, PDF, or just type your STEM problem.",
-              },
-              {
-                step: "2",
-                color: "purple",
-                title: "AI Analyzes",
-                desc: "The AI reads and understands the problem, then writes animation code.",
-              },
-              {
-                step: "3",
-                color: "green",
-                title: "Watch the Solution",
-                desc: "A step-by-step animated video walks you through the answer.",
-              },
+              { step: "1", color: "blue", title: "Upload or Type", desc: "Submit a photo, PDF, or just type your STEM problem." },
+              { step: "2", color: "purple", title: "AI Analyzes", desc: "The AI reads and understands the problem, then writes animation code." },
+              { step: "3", color: "green", title: "Watch the Solution", desc: "A step-by-step animated video walks you through the answer." },
             ].map(({ step, color, title, desc }) => (
               <div key={step} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
-                <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold mb-3 ${
-                    color === "blue"
-                      ? "bg-blue-500/20 text-blue-500 dark:text-blue-400"
-                      : color === "purple"
-                      ? "bg-purple-500/20 text-purple-500 dark:text-purple-400"
-                      : "bg-green-500/20 text-green-500 dark:text-green-400"
-                  }`}
-                >
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold mb-3 ${
+                  color === "blue" ? "bg-blue-500/20 text-blue-500 dark:text-blue-400"
+                  : color === "purple" ? "bg-purple-500/20 text-purple-500 dark:text-purple-400"
+                  : "bg-green-500/20 text-green-500 dark:text-green-400"
+                }`}>
                   {step}
                 </div>
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-1">{title}</h3>
@@ -557,7 +718,6 @@ export default function Home() {
             className="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-700"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Practice Problem — Step-by-step Solution</p>
               <button
@@ -569,7 +729,6 @@ export default function Home() {
                 </svg>
               </button>
             </div>
-            {/* Video */}
             <div className="bg-black">
               <video className="w-full max-h-[75vh]" controls autoPlay loop playsInline>
                 <source src={modalVideo} type="video/mp4" />
