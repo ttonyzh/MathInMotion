@@ -163,6 +163,15 @@ from manim import *
 - Operation lines (step 2, 4 above) use color=BLUE to visually distinguish them from result lines.
 - Result lines (step 1, 3, 5 above) use color=WHITE (or GREEN for the final answer).
 
+**Step Labels — REQUIRED**:
+- Before each BLUE operation line, add a short GRAY label that explains what operation is being applied and why.
+- Keep labels concise (under 60 characters).
+- Examples:
+  ("Subtract 5 from both sides to isolate x:", GRAY)
+  ("Divide both sides by 2 to solve for x:", GRAY)
+  ("Apply power rule: multiply by exponent, reduce power by 1:", GRAY)
+  ("Integrate each term separately:", GRAY)
+
 **Calculus — Derivatives (CRITICAL)**:
 - For ANY derivative problem, you MUST show the power rule applied to EACH TERM individually before combining.
 - Do NOT skip straight from f(x) to f'(x). Show every term's differentiation as its own BLUE step.
@@ -202,8 +211,10 @@ class SolveEquation(MovingCameraScene):
         # For calculus: pre-build fraction steps with make_frac and put them in as bare Mobjects.
         steps = [
             ("2x + 5 = 4", WHITE),
+            ("Subtract 5 from both sides to isolate x:", GRAY),
             ("2x + 5 - 5 = 4 - 5", BLUE),
             ("2x = -1", WHITE),
+            ("Divide both sides by 2 to solve for x:", GRAY),
             ("2x ÷ 2 = -1 ÷ 2", BLUE),
             ("x = -1/2", GREEN),
         ]

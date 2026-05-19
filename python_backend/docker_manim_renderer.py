@@ -70,10 +70,17 @@ class DockerManimRenderer:
         manim_code = re.sub(r'\bMathTex\s*\(', 'Text(', manim_code)
         manim_code = re.sub(r'\bTex\s*\(', 'Text(', manim_code)
 
-        # Fix 3: Strip raw-string prefixes on Text() strings (r"..." → "...").
-        manim_code = re.sub(r'\bText\s*\(\s*r(["\'])', r'Text(\1', manim_code)
+        # Fix 3: Remove MathTex-specific method calls that don't exist on Text.
+        manim_code = re.sub(r'[ \t]*\w+\.set_color_by_tex\s*\([^)]*\)[ \t]*\n?', '', manim_code)
+        manim_code = re.sub(r'[ \t]*\w+\.get_part_by_tex\s*\([^)]*\)[ \t]*\n?', '', manim_code)
 
-        # Fix 4: Replace Scene base class with MovingCameraScene for camera scroll support.
+        # Fix 4: Strip raw-string prefixes on Text() strings (r"..." → "...").
+        manim_code = re.sub(r'\bText\s*\(\s*r(["\'])', r'Text(\1', manim_code)
+        # Also strip LaTeX commands from Text strings (e.g. \dfrac → plain text)
+        manim_code = re.sub(r'\\dfrac\{([^}]+)\}\{([^}]+)\}', r'(\1)/(\2)', manim_code)
+        manim_code = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'(\1)/(\2)', manim_code)
+
+        # Fix 5: Replace Scene base class with MovingCameraScene for camera scroll support.
         manim_code = re.sub(
             r'class\s+(\w+)\s*\(\s*Scene\s*\)',
             r'class \1(MovingCameraScene)',

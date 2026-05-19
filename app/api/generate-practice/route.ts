@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
         {
           role: 'system',
           content:
-            'You are a math tutor. Your job is to generate practice problems. Return ONLY a valid JSON array of exactly 3 strings — no explanation, no markdown, no code fences. Each string is one practice problem similar in topic and difficulty to the given problem. Example output: ["Solve for x: 3x + 2 = 11", "Solve for x: 5x - 4 = 6", "Solve for x: 2x + 7 = 15"]',
+            'You are a math tutor. Your job is to generate practice problems. Return ONLY a valid JSON array of exactly 3 strings — no explanation, no markdown, no code fences. Each string is one practice problem similar in topic and difficulty to the given problem. CRITICAL: Never use the ^ caret for exponents. Always use Unicode superscripts: x² x³ x⁴ x⁵ x⁶ x⁷ x⁸ x⁹. Example output: ["Solve for x: 3x + 2 = 11", "Find the derivative of f(x) = 4x³ - 2x²", "Evaluate: ∫(3x² + 1)dx"]',
         },
         {
           role: 'user',
