@@ -1,65 +1,78 @@
-# Tutor AI - Visual STEM Problem Solver
+# MathInMotion - Visual STEM Problem Solver
 
-Tutor AI is an educational application that helps students understand and solve STEM problems through visual explanations. The application integrates Azure OpenAI for problem analysis and generates visual explanations of mathematical and scientific concepts.
-
-## Features
-
-- **File Upload**: Upload images or PDFs containing STEM problems
-- **Azure OpenAI Integration**: Analyze problems and generate step-by-step solutions
-- **Visual Explanations**: Create visual representations of solutions with mathematical notation
-- **Responsive UI**: Clean, intuitive interface for both desktop and mobile users
+MathInMotion helps students understand and solve STEM problems through animated visual explanations. Upload an image/PDF or type a problem, and the app generates a step-by-step animated video using Manim.
 
 ## Tech Stack
 
-- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
-- **Backend**: 
-  - Next.js API routes for the main application
-  - Python Flask server for visualization rendering
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
+- **Backend**: Next.js API routes + Python Flask server
 - **AI**: Azure OpenAI (GPT-4 Vision)
-- **Visualization**: HTML/CSS with MathJax for equations
+- **Animation**: Manim (Community Edition)
 
-## Getting Started
+## Prerequisites
 
-### Prerequisites
+Install the following before getting started:
 
-- Node.js (v18 or later)
-- Python 3.8 or later
-- Azure OpenAI API key and endpoint
+1. **Node.js** (v18 or later) — https://nodejs.org
+2. **Python 3.11** — https://www.python.org/downloads/
+3. **Cairo** (required by Manim for rendering):
+   - macOS: `brew install cairo pkg-config`
+   - Ubuntu/Debian: `sudo apt install libcairo2-dev pkg-config`
+   - Windows: install via GTK — see https://www.manim.community/doc/stable/installation/windows.html
+4. **Azure OpenAI** — an API key, endpoint, and deployment name
 
-### Environment Setup
+## Setup
 
-Create a `.env.local` file in the root directory with the following variables:
+### 1. Clone the repo
 
+```bash
+git clone https://github.com/ttonyzh/tutor_AI
+cd tutor_AI
 ```
-AZURE_OPENAI_API_KEY=your-api-key-here
-AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT_NAME=your-deployment-name
-AZURE_OPENAI_API_VERSION=2023-05-15
-```
 
-### Installation
-
-1. Clone the repository
-2. Install dependencies:
+### 2. Install frontend dependencies
 
 ```bash
 npm install
 ```
 
-3. Set up the Python backend:
+### 3. Install Python backend dependencies
 
 ```bash
-cd python_backend
-chmod +x setup.sh
-./setup.sh
+pip install -r python_backend/requirements.txt
 ```
 
-### Running the Application
+### 4. Set up environment variables
 
-Use the start script to run both the Next.js frontend and Python backend:
+Create a `.env.local` file in the root directory:
 
+```
+AZURE_OPENAI_API_KEY=your-api-key
+AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT_NAME=your-deployment-name
+AZURE_OPENAI_API_VERSION=2025-01-01-preview
+```
+
+## Running the App
+
+You need two terminals running simultaneously:
+
+**Terminal 1 — Python Flask server (port 5005):**
 ```bash
-./start.sh
+python -m python_backend.direct_manim_server
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the application.
+**Terminal 2 — Next.js frontend (port 3000):**
+```bash
+npm run dev
+```
+
+Then open http://localhost:3000 in your browser.
+
+## Usage
+
+1. Type a math/STEM problem in the text box, or upload a PDF/image
+2. Click **Solve & Animate**
+3. The app calls Azure OpenAI to generate a solution and Manim animation code
+4. The Flask server renders the animation into an MP4 video
+5. Watch the step-by-step animated explanation in the browser

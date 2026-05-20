@@ -4,16 +4,135 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #0f0f1a;
 }
 
 .dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #04040c;
+  --foreground: #f1f5f9;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.55); }
+
+/* ── Animated shimmer heading ── */
+@keyframes text-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    #fff       0%,
+    #c7d2fe   20%,
+    #a78bfa   40%,
+    #818cf8   50%,
+    #a78bfa   60%,
+    #c7d2fe   80%,
+    #fff      100%
+  );
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: text-shimmer 6s linear infinite;
+}
+/* Light-mode version */
+.shimmer-text-light {
+  background: linear-gradient(
+    90deg,
+    #1e1b4b   0%,
+    #4338ca   20%,
+    #7c3aed   40%,
+    #6366f1   50%,
+    #7c3aed   60%,
+    #4338ca   80%,
+    #1e1b4b  100%
+  );
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: text-shimmer 6s linear infinite;
+}
+
+/* ── Moving background blobs ── */
+@keyframes blob1 {
+  0%,100% { transform: translate(0,0)    scale(1);    }
+  25%      { transform: translate(40px,-50px) scale(1.08); }
+  50%      { transform: translate(-30px, 30px) scale(0.94); }
+  75%      { transform: translate(20px, 50px)  scale(1.04); }
+}
+@keyframes blob2 {
+  0%,100% { transform: translate(0,0)    scale(1);    }
+  33%      { transform: translate(-60px, 40px) scale(1.1);  }
+  66%      { transform: translate(40px,-60px) scale(0.9);  }
+}
+@keyframes blob3 {
+  0%,100% { transform: translate(0,0)   scale(1);    }
+  40%      { transform: translate(50px, 30px) scale(1.06); }
+  80%      { transform: translate(-40px,-20px) scale(0.93); }
+}
+.blob1 { animation: blob1 18s ease-in-out infinite; }
+.blob2 { animation: blob2 22s ease-in-out infinite 3s; }
+.blob3 { animation: blob3 26s ease-in-out infinite 6s; }
+
+/* ── Glow pulse on CTA button ── */
+@keyframes glow-pulse {
+  0%,100% { box-shadow: 0 0 18px rgba(99,102,241,0.35), 0 4px 24px rgba(124,58,237,0.2); }
+  50%      { box-shadow: 0 0 32px rgba(99,102,241,0.55), 0 4px 40px rgba(124,58,237,0.35); }
+}
+.glow-btn { animation: glow-pulse 3s ease-in-out infinite; }
+
+/* ── Dot grid ── */
+.dot-grid {
+  background-image: radial-gradient(rgba(255,255,255,0.055) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ── Card inner-light sheen ── */
+.card-sheen {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 3px rgba(0,0,0,0.4);
+}
+
+/* ── Gradient border ring on hover ── */
+.grad-border {
+  position: relative;
+  isolation: isolate;
+}
+.grad-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(99,102,241,0), rgba(124,58,237,0));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  transition: background 0.3s;
+  pointer-events: none;
+}
+.grad-border:hover::before {
+  background: linear-gradient(135deg, rgba(99,102,241,0.6), rgba(124,58,237,0.6));
+}
+
+/* ── Floating math symbols ── */
+@keyframes sym-float {
+  0%,100% { transform: translateY(0) rotate(var(--rot)); opacity: var(--op); }
+  50%      { transform: translateY(-14px) rotate(var(--rot)); opacity: calc(var(--op) * 1.4); }
+}
+.math-sym {
+  animation: sym-float var(--dur, 8s) ease-in-out infinite var(--delay, 0s);
 }
