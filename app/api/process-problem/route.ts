@@ -8,10 +8,16 @@ export const maxDuration = 120;
 
 // Define types for better type safety
 
+interface Citation {
+  source: string;
+  chapter: string;
+}
+
 interface ProcessResponse {
   success: boolean;
   solution: string;
   manimCode: string;
+  citations?: Citation[];
   error?: string;
   suggestion?: string;
   debugInfo?: {
@@ -19,6 +25,27 @@ interface ProcessResponse {
     stack?: string;
     timestamp?: string;
   };
+}
+
+async function fetchRAGContext(query: string): Promise<{ context: string; citations: Citation[] }> {
+  try {
+    const res = await fetch('http://localhost:5005/rag-context', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return { context: '', citations: [] };
+    const data = await res.json();
+    const chunks: { text: string; source: string; chapter: string }[] = data.chunks || [];
+    const context = chunks
+      .map(c => `${c.text}\n(Source: ${c.source}, ${c.chapter})`)
+      .join('\n---\n');
+    const citations: Citation[] = chunks.map(c => ({ source: c.source, chapter: c.chapter }));
+    return { context, citations };
+  } catch {
+    return { context: '', citations: [] };
+  }
 }
 
 // Constants
@@ -33,7 +60,7 @@ const ALLOWED_FILE_TYPES = [
 ];
 
 // Azure OpenAI integration
-async function processWithAzureOpenAI(text: string, imageBuffer?: Buffer, mimeType?: string) {
+async function processWithAzureOpenAI(text: string, imageBuffer?: Buffer, mimeType?: string, ragContext?: string) {
   try {
     // Extract environment variables
     const apiKey = process.env.AZURE_OPENAI_API_KEY;
@@ -177,20 +204,22 @@ from manim import *
 - Do NOT skip straight from f(x) to f'(x). Show every term's differentiation as its own BLUE step.
 - Example for f(x) = 3x³ - 2x² + x - 7:
   1. "f(x) = 3x³ - 2x² + x - 7"  (WHITE)
-  2. "d/dx [3x³] = 3 × 3x² = 9x²"  (BLUE)  ← power rule on first term
+  2. "d/dx [3x³] = 3 × 3x² = 9x²"  (BLUE)  ← power rule on first term (use make_frac for d/dx)
   3. "d/dx [-2x²] = -2 × 2x = -4x"  (BLUE)  ← power rule on second term
   4. "d/dx [x] = 1"  (BLUE)  ← power rule on third term
   5. "d/dx [-7] = 0"  (BLUE)  ← constant rule
   6. "f'(x) = 9x² - 4x + 1"  (GREEN)  ← combine all results, final answer
+- When writing the bracket portion next to make_frac (e.g. "[3x³] = 9x²"), always start the Text string with a space: " [3x³] = 9x²" so it doesn't touch the fraction bar.
 - For d/dx steps that include the bracket notation, use make_frac to render d/dx as a stacked fraction next to the bracketed term.
 
 **Calculus — Integrals (CRITICAL)**:
 - For ANY integral problem, show the power rule for integration applied to EACH TERM individually.
+- ALWAYS put a space between ∫ and the expression that follows it — e.g. "∫ 4x³ dx" not "∫4x³ dx". The integral glyph overlaps adjacent characters if there is no space.
 - Example for ∫(4x³ + 2x)dx:
-  1. "∫(4x³ + 2x) dx"  (WHITE)
-  2. "∫4x³ dx = 4 × x⁴/4 = x⁴"  (BLUE)  ← integrate first term
-  3. "∫2x dx = 2 × x²/2 = x²"  (BLUE)  ← integrate second term
-  4. "∫(4x³ + 2x) dx = x⁴ + x² + C"  (GREEN)  ← combine, final answer
+  1. "∫ (4x³ + 2x) dx"  (WHITE)
+  2. "∫ 4x³ dx = 4 × x⁴/4 = x⁴"  (BLUE)  ← integrate first term
+  3. "∫ 2x dx = 2 × x²/2 = x²"  (BLUE)  ← integrate second term
+  4. "∫ (4x³ + 2x) dx = x⁴ + x² + C"  (GREEN)  ← combine, final answer
 
 **Required pattern — use this exact structure**:
 \`\`\`python
@@ -254,12 +283,13 @@ class SolveEquation(MovingCameraScene):
 
 Adapt the steps list to match the actual problem. Always show the operation applied to both sides (BLUE) before showing the simplified result (WHITE). The final answer is always GREEN with a YELLOW box. Remember: no ^ carets — use ² ³ ⁴ etc. for exponents.`;
     
-    // Add text content if available
-    if (text) {
-      contentFromUser.push({
-        type: "text",
-        text: text
-      });
+    // Build user text — prepend RAG context when available
+    const fullText = ragContext
+      ? `Relevant textbook material for this problem:\n---\n${ragContext}\n---\n\nProblem to solve:\n${text}`
+      : text;
+
+    if (fullText) {
+      contentFromUser.push({ type: "text", text: fullText });
     }
     
     // Add image content if available (for GPT-4 Vision)
@@ -492,7 +522,9 @@ async function validateAndProcessRequest(request: NextRequest): Promise<ProcessR
         combinedText = `${fileContext}\n\n${problemText}`;
       }
 
-      return await processWithAzureOpenAI(combinedText, buffer, file.type);
+      const { context, citations } = await fetchRAGContext(problemText?.trim() || 'math problem from image');
+      const result = await processWithAzureOpenAI(combinedText, buffer, file.type, context);
+      return { ...result, citations };
 
     } catch (error) {
       console.error('Error processing file:', error);
@@ -505,7 +537,9 @@ async function validateAndProcessRequest(request: NextRequest): Promise<ProcessR
     }
   } else {
     try {
-      return await processWithAzureOpenAI(problemText!.trim());
+      const { context, citations } = await fetchRAGContext(problemText!.trim());
+      const result = await processWithAzureOpenAI(problemText!.trim(), undefined, undefined, context);
+      return { ...result, citations };
     } catch (error) {
       console.error('Error processing text problem:', error);
       return {
@@ -527,6 +561,7 @@ export async function POST(request: NextRequest) {
         success: true,
         solution: result.solution,
         manimCode: result.manimCode,
+        citations: result.citations ?? [],
       } as ProcessResponse);
     } else {
       // Return error response with 400 status

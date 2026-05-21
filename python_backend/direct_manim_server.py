@@ -1,10 +1,14 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import os
+import sys
 import logging
 import subprocess
 import base64
 from .docker_manim_renderer import DockerManimRenderer
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from rag.math_db import retrieve, seed_database
 
 # Configure logging
 logging.basicConfig(
@@ -31,6 +35,27 @@ os.makedirs(MEDIA_DIR, exist_ok=True)
 
 # Initialize the Docker-based Manim renderer
 manim_renderer = DockerManimRenderer(MEDIA_DIR)
+
+# Seed the RAG database on startup (no-op if already seeded)
+try:
+    seed_database()
+except Exception as e:
+    logger.warning(f"RAG seed failed (non-fatal): {e}")
+
+
+@app.route('/rag-context', methods=['POST'])
+def rag_context():
+    """Return relevant textbook chunks for a given query."""
+    try:
+        data = request.json or {}
+        query = data.get('query', '').strip()
+        if not query:
+            return jsonify({'success': False, 'error': 'No query provided'}), 400
+        chunks = retrieve(query, n_results=3)
+        return jsonify({'success': True, 'chunks': chunks})
+    except Exception as e:
+        logger.error(f"RAG retrieval error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/render-manim', methods=['POST', 'OPTIONS'])
 def render_manim():

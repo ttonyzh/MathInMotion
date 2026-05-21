@@ -1,7 +1,0 @@
-# This file is used internally by FFMPEG.
-file 'file:/manim/media/videos/test_manim/720p30/partial_movie_files/ComplexTransformation/2016333726_3757546183_223132457.mp4'
-file 'file:/manim/media/videos/test_manim/720p30/partial_movie_files/ComplexTransformation/543634251_2895171749_3307801218.mp4'
-file 'file:/manim/media/videos/test_manim/720p30/partial_movie_files/ComplexTransformation/543634251_2958952052_2977199268.mp4'
-file 'file:/manim/media/videos/test_manim/720p30/partial_movie_files/ComplexTransformation/543634251_2959290642_2478865988.mp4'
-file 'file:/manim/media/videos/test_manim/720p30/partial_movie_files/ComplexTransformation/543634251_575506281_3585424639.mp4'
-file 'file:/manim/media/videos/test_manim/720p30/partial_movie_files/ComplexTransformation/543634251_2834709167_4264653908.mp4'
