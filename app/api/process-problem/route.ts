@@ -129,6 +129,7 @@ CRITICAL ANIMATION RULES — follow these exactly:
 - Use π for pi (not "pi").
 - Use × for multiplication in operation lines (not "*").
 - Fractions inside plain text (like coefficients): write as "1/2", "-3/4" etc. (slash notation is fine).
+- If the original problem uses "/" for a fraction (e.g. "(x² - 4) / (x - 2)"), render it as a proper stacked fraction using make_frac — do NOT write it as plain text with "/" and do NOT switch to "÷". Reserve "÷" only for problems that explicitly use the ÷ symbol.
 
 **Stacked Fractions — d/dx, dy/dx, a/b displayed as proper fractions**:
 - When a step contains a derivative (d/dx, dy/dx, d²y/dx²) or any fraction that should render as a stacked visual fraction (numerator on top, denominator below a bar), do NOT write it as plain text. Use the make_frac class method (already included in the Required pattern below).
@@ -215,6 +216,34 @@ from manim import *
 - When writing the bracket portion next to make_frac (e.g. "[3x³] = 9x²"), always start the Text string with a space: " [3x³] = 9x²" so it doesn't touch the fraction bar.
 - For d/dx steps that include the bracket notation, use make_frac to render d/dx as a stacked fraction next to the bracketed term.
 
+**Calculus — Limits (CRITICAL)**:
+- For ANY limit problem, display the limit symbol as a proper stacked notation using make_lim (defined below):
+  - "lim" on top, "x→a" (or "x→∞" etc.) as a smaller label directly below it.
+  - NEVER write "lim x→2" as a single flat text string. Always use make_lim so it renders like real math.
+- Example for lim x→2 (x² - 4)/(x - 2):
+  1. VGroup(make_lim("x→2"), make_frac("x² - 4", "x - 2"))  (WHITE)  ← stacked fraction next to lim
+  2. "Factor numerator to simplify:"  (GRAY)
+  3. VGroup(make_lim("x→2"), make_frac("(x-2)(x+2)", "x-2"))  (BLUE)
+  4. "Cancel (x - 2) from top and bottom:"  (GRAY)
+  5. VGroup(make_lim("x→2"), Text(" (x + 2)"))  (BLUE)
+  6. "Evaluate the limit by direct substitution:"  (GRAY)
+  7. "lim = 2 + 2 = 4"  (GREEN)
+- To build a limit-with-fraction step:
+\`\`\`python
+lim_grp = self.make_lim("x→2", font_size, WHITE)
+frac = self.make_frac("x² - 4", "x - 2", font_size, WHITE)
+frac.next_to(lim_grp, RIGHT, buff=0.2)
+step = VGroup(lim_grp, frac)
+\`\`\`
+- For limit steps without a fraction (e.g. after cancelling), attach a Text object instead of make_frac:
+\`\`\`python
+lim_grp = self.make_lim("x→2", font_size, BLUE)
+rest = Text(" (x + 2)", font_size=font_size, color=BLUE)
+rest.next_to(lim_grp, RIGHT, buff=0.12)
+step = VGroup(lim_grp, rest)
+\`\`\`
+- Put every finished VGroup into steps as a bare Mobject (same pattern as make_frac steps).
+
 **Calculus — Integrals (CRITICAL)**:
 - For ANY integral problem, show the power rule for integration applied to EACH TERM individually.
 - ALWAYS put a space between ∫ and the expression that follows it — e.g. "∫ 4x³ dx" not "∫4x³ dx". The integral glyph overlaps adjacent characters if there is no space.
@@ -233,6 +262,8 @@ from manim import *
   - "d/dx [term]" → "the derivative of [term]"  e.g. "d/dx [3x³] = 9x²" → "the derivative of 3x cubed equals 9x squared"
   - Never say "d d x" — always say "the derivative of" followed by what's inside the bracket
   - Never say "open parenthesis" or "close parenthesis" — just omit them. "(4x + 2)" → "4x plus 2"
+  - "÷" or "/" in an expression → "divided by". Never say "numerator" or "denominator" for ÷ or / expressions — those words are only for stacked fractions (make_frac steps).
+  - "lim x→2" → "the limit as x approaches 2"
 - Keep each narration short — one sentence per step, under 15 words.
 - Example:
   ("2x + 5 = 4", WHITE),  # tts: We start with the equation 2x plus 5 equals 4
@@ -254,6 +285,13 @@ class SolveEquation(MovingCameraScene):
         num.next_to(bar, UP, buff=0.07)
         den.next_to(bar, DOWN, buff=0.07)
         return VGroup(num, bar, den)
+
+    def make_lim(self, under_str, fs, color):
+        lim = Text("lim", font_size=fs, color=color)
+        sub = Text(under_str, font_size=int(fs * 0.65), color=color)
+        sub.next_to(lim, DOWN, buff=0.04)
+        sub.align_to(lim, LEFT)
+        return VGroup(lim, sub)
 
     def construct(self):
         # Steps list: each entry is either a ("text", COLOR) tuple or a pre-built Mobject.

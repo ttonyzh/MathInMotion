@@ -31,6 +31,12 @@ def _clean_tts_text(text: str) -> str:
     text = re.sub(r'\bclos(?:e|ing)\s+parenthes[ie]s\b', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\bclose\s+paren\b', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\bopen\s+paren\b', '', text, flags=re.IGNORECASE)
+    # "numerator"/"denominator" only belong with stacked fractions, not ÷ expressions.
+    # If "divided by" is already in the text, the speaker is describing a ÷ operation —
+    # replace numerator/denominator with the plain position words.
+    if re.search(r'\bdivided\s+by\b', text, flags=re.IGNORECASE):
+        text = re.sub(r'\bnumerator\b', 'top', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bdenominator\b', 'bottom', text, flags=re.IGNORECASE)
     # Collapse multiple spaces left by removals
     text = re.sub(r' {2,}', ' ', text).strip(' ,')
     return text
@@ -140,9 +146,18 @@ def prepare_narration(manim_code: str) -> tuple[str, str | None]:
         clip_paths.append(wav_path)
 
     wait_times = _calculate_waits(clips_ms)
+
+    # Count actual self.wait(0.4/0.5) calls to detect mismatch
+    n_waits = len(re.findall(r'self\.wait\(0\.[45]\)', manim_code))
+    if n_waits != len(narrations):
+        logger.warning(
+            f"MISMATCH: {len(narrations)} # tts: comments but {n_waits} self.wait(0.4/0.5) calls"
+        )
+        logger.warning(f"TTS texts found: {[n['text'][:40] for n in narrations]}")
+
     code = _inject(manim_code, clip_paths, wait_times)
 
     logger.info(
-        f"Narration prepared: {len(narrations)} clips | waits={wait_times}"
+        f"Narration prepared: {len(narrations)} clips | {n_waits} waits | waits={wait_times}"
     )
     return code, temp_dir
