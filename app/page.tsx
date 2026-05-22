@@ -60,6 +60,7 @@ export default function Home() {
   const [modalVideo, setModalVideo] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [voice, setVoice] = useState("en-US-JennyNeural");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -143,7 +144,7 @@ export default function Home() {
 
       const renderRes  = await fetch("/api/render-manim", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ manimCode: processData.manimCode }),
+        body: JSON.stringify({ manimCode: processData.manimCode, voice }),
       });
       const renderData = await renderRes.json();
       if (!renderData.success || !renderData.videoBase64)
@@ -181,7 +182,7 @@ export default function Home() {
       if (!processData.success || !processData.manimCode) throw new Error("Failed to generate code");
       const renderRes  = await fetch("/api/render-manim", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ manimCode: processData.manimCode }),
+        body: JSON.stringify({ manimCode: processData.manimCode, voice }),
       });
       const renderData = await renderRes.json();
       if (!renderData.success || !renderData.videoBase64) throw new Error("Failed to render");
@@ -402,6 +403,33 @@ export default function Home() {
                 value={problemText}
                 onChange={(e) => { setProblemText(e.target.value); resetState(); }}
               />
+
+              {/* Voice selector */}
+              <div className="flex flex-col gap-1.5">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Narrator voice</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: "en-US-JennyNeural", label: "Jenny", gender: "F" },
+                    { id: "en-US-GuyNeural",   label: "Guy",   gender: "M" },
+                    { id: "en-US-AriaNeural",  label: "Aria",  gender: "F" },
+                    { id: "en-US-DavisNeural", label: "Davis", gender: "M" },
+                    { id: "en-US-JasonNeural", label: "Jason", gender: "M" },
+                    { id: "en-US-NancyNeural", label: "Nancy", gender: "F" },
+                  ].map(v => (
+                    <button
+                      key={v.id}
+                      onClick={() => setVoice(v.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                        voice === v.id
+                          ? "bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-500/30"
+                          : "bg-transparent border-gray-200 dark:border-white/[0.1] text-gray-600 dark:text-gray-400 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                      }`}
+                    >
+                      {v.label} <span className="opacity-60 ml-0.5">{v.gender}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* CTA */}
               <button

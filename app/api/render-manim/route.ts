@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // Define types for better type safety
 interface RenderRequest { //the request coming in
   manimCode: string;
+  voice?: string;
 }
 
 interface RenderResponse { //the response of the AI 
@@ -24,6 +25,7 @@ export async function POST(request: NextRequest) {
     // Parse and validate request
     const data: Partial<RenderRequest> = await request.json(); // the request coming in
     const manimCode = data.manimCode;
+    const voice     = data.voice ?? 'en-US-JennyNeural';
     
     if (!manimCode?.trim()) {
       return NextResponse.json(
@@ -41,7 +43,7 @@ export async function POST(request: NextRequest) {
     const response = await fetch(BACKEND_URL, { //sends the request to the backend, localhost:5005. Sends this code to the manim server and it outputs an image or video
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ manimCode }), //changes raw manim code into a json string. We need the curly braces because we are sending a json object.
+      body: JSON.stringify({ manimCode, voice }), //changes raw manim code into a json string. We need the curly braces because we are sending a json object.
       signal: controller.signal, //connecting the abortController to the fetch request
     });
     

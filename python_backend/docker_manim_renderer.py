@@ -108,7 +108,7 @@ class DockerManimRenderer:
 
         return manim_code
 
-    def render_manim_code(self, manim_code):
+    def render_manim_code(self, manim_code, voice='en-US-JennyNeural'):
         """
         Render Manim code using local Manim installation.
 
@@ -127,7 +127,7 @@ class DockerManimRenderer:
 
         # Prepare narration before fix_manim_code: generates WAV clips,
         # strips camera scroll, injects add_sound() + _STEP_WAITS
-        manim_code, tts_temp_dir = prepare_narration(manim_code)
+        manim_code, tts_temp_dir = prepare_narration(manim_code, voice=voice)
 
         manim_code = self.fix_manim_code(manim_code)
 

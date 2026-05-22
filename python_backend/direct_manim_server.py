@@ -75,14 +75,15 @@ def render_manim():
             return jsonify({'error': 'No data provided'}), 400
             
         manim_code = data.get('manimCode')
-        
+        voice      = data.get('voice', 'en-US-JennyNeural')
+
         if not manim_code:
             logger.error("No Manim code provided")
             return jsonify({'error': 'No Manim code provided'}), 400
-        
-        logger.info("Received Manim code for rendering")
 
-        render_result = manim_renderer.render_manim_code(manim_code)
+        logger.info(f"Received Manim code for rendering (voice={voice})")
+
+        render_result = manim_renderer.render_manim_code(manim_code, voice=voice)
 
         if not render_result['success']:
             error_msg = render_result.get('error', 'Unknown error during rendering')
