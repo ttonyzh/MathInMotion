@@ -106,7 +106,7 @@ CRITICAL ANIMATION RULES — follow these exactly:
 - Align all steps to the left, starting near the top-left of the screen.
 - Position the first step with: step.to_corner(UL, buff=0.8)
 - Position each subsequent step with: step.next_to(previous_step, DOWN, buff=0.4) and step.align_to(first_step, LEFT)
-- Animate each step appearing with self.play(Write(step)), then self.wait(0.5) before the next step.
+- Animate each step appearing with self.play(Write(step)), then self.wait(0.4) before the next step.
 
 **Boxes / Highlighting**:
 - Do NOT use SurroundingRectangle on any intermediate steps.
@@ -133,7 +133,8 @@ CRITICAL ANIMATION RULES — follow these exactly:
 **Stacked Fractions — d/dx, dy/dx, a/b displayed as proper fractions**:
 - When a step contains a derivative (d/dx, dy/dx, d²y/dx²) or any fraction that should render as a stacked visual fraction (numerator on top, denominator below a bar), do NOT write it as plain text. Use the make_frac class method (already included in the Required pattern below).
 - make_frac is defined as a method on the Scene class (indented under class SolveEquation(MovingCameraScene):).
-- Compute font_size BEFORE calling make_frac (count your total steps first). Build the VGroup step before the steps list, then place the finished VGroup object directly into the list — NOT as a tuple:
+- Compute font_size BEFORE calling make_frac (count your total steps first). Build the VGroup step before the steps list, then place the finished VGroup object directly into the list — NOT as a tuple.
+- NEVER pre-fill the steps list with tuples and then overwrite entries with steps[N] = var. This causes IndexError. Always place every VGroup inline in the list from the start.
 \`\`\`python
 # 1. Count steps and compute font_size first
 total_n = 5  # replace with your actual step count
@@ -208,7 +209,9 @@ from manim import *
   3. "d/dx [-2x²] = -2 × 2x = -4x"  (BLUE)  ← power rule on second term
   4. "d/dx [x] = 1"  (BLUE)  ← power rule on third term
   5. "d/dx [-7] = 0"  (BLUE)  ← constant rule
-  6. "f'(x) = 9x² - 4x + 1"  (GREEN)  ← combine all results, final answer
+  6. "Now add all the parts together:"  (GRAY)  ← transition label before final answer
+  7. "f'(x) = 9x² - 4x + 1"  (GREEN)  ← combine all results, final answer
+- ALWAYS include the "Now add all the parts together:" GRAY label as the second-to-last step in every derivative problem, right before the GREEN final answer line.
 - When writing the bracket portion next to make_frac (e.g. "[3x³] = 9x²"), always start the Text string with a space: " [3x³] = 9x²" so it doesn't touch the fraction bar.
 - For d/dx steps that include the bracket notation, use make_frac to render d/dx as a stacked fraction next to the bracketed term.
 
@@ -220,6 +223,23 @@ from manim import *
   2. "∫ 4x³ dx = 4 × x⁴/4 = x⁴"  (BLUE)  ← integrate first term
   3. "∫ 2x dx = 2 × x²/2 = x²"  (BLUE)  ← integrate second term
   4. "∫ (4x³ + 2x) dx = x⁴ + x² + C"  (GREEN)  ← combine, final answer
+
+**Voice Narration — REQUIRED**:
+- Every entry in the steps list MUST have a trailing comment in this exact format:  # tts: spoken text here
+- The spoken text must be plain English with NO math symbols — spell everything out as it would be read aloud.
+  - "²" → "squared",  "³" → "cubed",  "√" → "square root of",  "∫" → "integral of"
+  - "π" → "pi",  "×" → "times",  "÷" → "divided by",  "=" → "equals",  "≠" → "not equal to"
+  - "-3" → "negative 3",  "1/2" → "one half"
+  - "d/dx [term]" → "the derivative of [term]"  e.g. "d/dx [3x³] = 9x²" → "the derivative of 3x cubed equals 9x squared"
+  - Never say "d d x" — always say "the derivative of" followed by what's inside the bracket
+  - Never say "open parenthesis" or "close parenthesis" — just omit them. "(4x + 2)" → "4x plus 2"
+- Keep each narration short — one sentence per step, under 15 words.
+- Example:
+  ("2x + 5 = 4", WHITE),  # tts: We start with the equation 2x plus 5 equals 4
+  ("Subtract 5 from both sides to isolate x:", GRAY),  # tts: Subtract 5 from both sides to isolate x
+  ("2x + 5 - 5 = 4 - 5", BLUE),  # tts: Subtracting 5 from both sides gives 2x equals negative 1
+  ("2x = -1", WHITE),  # tts: Simplified to 2x equals negative 1
+  ("x = -1/2", GREEN),  # tts: The final answer is x equals negative one half
 
 **Required pattern — use this exact structure**:
 \`\`\`python
@@ -239,13 +259,13 @@ class SolveEquation(MovingCameraScene):
         # Steps list: each entry is either a ("text", COLOR) tuple or a pre-built Mobject.
         # For calculus: pre-build fraction steps with make_frac and put them in as bare Mobjects.
         steps = [
-            ("2x + 5 = 4", WHITE),
-            ("Subtract 5 from both sides to isolate x:", GRAY),
-            ("2x + 5 - 5 = 4 - 5", BLUE),
-            ("2x = -1", WHITE),
-            ("Divide both sides by 2 to solve for x:", GRAY),
-            ("2x ÷ 2 = -1 ÷ 2", BLUE),
-            ("x = -1/2", GREEN),
+            ("2x + 5 = 4", WHITE),                             # tts: We start with the equation 2x plus 5 equals 4
+            ("Subtract 5 from both sides to isolate x:", GRAY),# tts: Subtract 5 from both sides to isolate x
+            ("2x + 5 - 5 = 4 - 5", BLUE),                     # tts: Subtracting 5 gives 2x equals negative 1
+            ("2x = -1", WHITE),                                # tts: Simplified to 2x equals negative 1
+            ("Divide both sides by 2 to solve for x:", GRAY),  # tts: Divide both sides by 2 to find x
+            ("2x ÷ 2 = -1 ÷ 2", BLUE),                        # tts: Dividing both sides by 2
+            ("x = -1/2", GREEN),                               # tts: The final answer is x equals negative one half
         ]
 
         n = len(steps)
@@ -320,7 +340,7 @@ Adapt the steps list to match the actual problem. Always show the operation appl
           content: userContent
         }
       ],
-      max_completion_tokens: 4000
+      max_completion_tokens: 8000
     };
 
     const controller = new AbortController();

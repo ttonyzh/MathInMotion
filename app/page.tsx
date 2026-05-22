@@ -479,16 +479,6 @@ export default function Home() {
             {/* Main Video */}
             {status === "done" && animationUrl && (
               <div className="card-sheen grad-border bg-white dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.07] rounded-2xl overflow-hidden shadow-2xl shadow-black/10 dark:shadow-indigo-950/60 backdrop-blur-sm">
-                <div className="px-5 py-3.5 border-b border-gray-100 dark:border-white/[0.06] flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-red-400/70" />
-                      <div className="w-2.5 h-2.5 rounded-full bg-yellow-400/70" />
-                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400/70" />
-                    </div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400 ml-1">Step-by-step Animation</p>
-                  </div>
-                </div>
                 <div className="bg-black">
                   <video className="w-full" controls autoPlay loop playsInline>
                     <source src={animationUrl} type="video/mp4" />

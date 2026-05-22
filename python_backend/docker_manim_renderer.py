@@ -5,6 +5,7 @@ import logging
 import uuid
 import re
 from pathlib import Path
+from .tts_narrator import prepare_narration
 
 # Configure logging
 logging.basicConfig(
@@ -87,6 +88,24 @@ class DockerManimRenderer:
             manim_code
         )
 
+        # Fix 6: Replace steps[N] = var (can cause IndexError if list is too short)
+        # with a safe append-or-replace that never goes out of range.
+        def safe_step_assign(m):
+            indent = m.group(1)
+            idx    = m.group(2)
+            var    = m.group(3)
+            return (
+                f"{indent}if int({idx}) < len(steps):\n"
+                f"{indent}    steps[{idx}] = {var}\n"
+                f"{indent}else:\n"
+                f"{indent}    steps.append({var})"
+            )
+        manim_code = re.sub(
+            r'([ \t]+)steps\[(\d+)\]\s*=\s*(\w+)',
+            safe_step_assign,
+            manim_code,
+        )
+
         return manim_code
 
     def render_manim_code(self, manim_code):
@@ -105,6 +124,10 @@ class DockerManimRenderer:
         pattern = r'self\.play\s*\(\s*SurroundingRectangle\('
         replacement = 'rect = SurroundingRectangle(\n            self.play(Create(rect))\n            rect = '
         manim_code = re.sub(pattern, replacement, manim_code)
+
+        # Prepare narration before fix_manim_code: generates WAV clips,
+        # strips camera scroll, injects add_sound() + _STEP_WAITS
+        manim_code, tts_temp_dir = prepare_narration(manim_code)
 
         manim_code = self.fix_manim_code(manim_code)
 
@@ -174,6 +197,14 @@ class DockerManimRenderer:
                 script_path.unlink()
             except Exception as e:
                 logger.warning(f"Failed to clean up script file: {e}")
+
+            # Clean up temporary TTS audio files (already baked into video by Manim)
+            if tts_temp_dir:
+                try:
+                    import shutil
+                    shutil.rmtree(tts_temp_dir, ignore_errors=True)
+                except Exception:
+                    pass
 
             return {
                 'success': True,
