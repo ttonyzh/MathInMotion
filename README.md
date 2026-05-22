@@ -6,7 +6,7 @@ MathInMotion helps students understand and solve STEM problems through animated 
 
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
 - **Backend**: Next.js API routes + Python Flask server
-- **AI**: Azure OpenAI (GPT-4 Vision)
+- **AI**: Azure OpenAI + Azure Cognitive Services Speech
 - **Animation**: Manim (Community Edition)
 
 ## Prerequisites
@@ -19,7 +19,10 @@ Install the following before getting started:
    - macOS: `brew install cairo pkg-config`
    - Ubuntu/Debian: `sudo apt install libcairo2-dev pkg-config`
    - Windows: install via GTK — see https://www.manim.community/doc/stable/installation/windows.html
-4. **Azure OpenAI** — an API key, endpoint, and deployment name
+4. **Azure OpenAI** — create a resource at https://portal.azure.com and deploy a GPT-4o or GPT-4 model
+5. **Azure Speech** — create a Speech resource at https://portal.azure.com (Free F0 tier is sufficient)
+
+> **You must supply your own API keys.** This project does not include any credentials.
 
 ## Setup
 
@@ -44,14 +47,23 @@ pip install -r python_backend/requirements.txt
 
 ### 4. Set up environment variables
 
-Create a `.env.local` file in the root directory:
+Create a `.env.local` file in the **root directory** for the Next.js frontend:
 
 ```
-AZURE_OPENAI_API_KEY=your-api-key
+AZURE_OPENAI_API_KEY=your-azure-openai-key
 AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT_NAME=your-deployment-name
 AZURE_OPENAI_API_VERSION=2025-01-01-preview
 ```
+
+Create a `.env` file in the **`python_backend/` directory** for the Flask server:
+
+```
+AZURE_SPEECH_KEY=your-azure-speech-key
+AZURE_SPEECH_REGION=eastus
+```
+
+> Replace `eastus` with whichever Azure region your Speech resource is in.
 
 ## Running the App
 
