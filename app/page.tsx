@@ -308,18 +308,21 @@ export default function Home() {
             </div>
 
             {/* Badge */}
-            <div className="relative inline-flex items-center gap-2 bg-white dark:bg-indigo-500/[0.08] border border-gray-200 dark:border-indigo-500/25 rounded-full px-4 py-1.5 shadow-sm">
-              <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+            <div className="fade-up fade-up-1 relative inline-flex items-center gap-2 bg-white/90 dark:bg-indigo-500/[0.09] border border-indigo-200 dark:border-indigo-500/30 rounded-full px-4 py-1.5 shadow-sm shadow-indigo-500/10 dark:shadow-none">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-60" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
+              </span>
               <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">AI-Powered STEM Learning</span>
             </div>
 
             {/* Headline */}
-            <h1 className="relative text-6xl sm:text-7xl font-bold tracking-tight leading-[1.04]">
+            <h1 className="relative fade-up fade-up-2 text-6xl sm:text-7xl font-bold tracking-tight leading-[1.04]">
               <span className="hidden dark:inline shimmer-text">Math, animated.</span>
               <span className="dark:hidden shimmer-text-light">Math, animated.</span>
             </h1>
 
-            <p className="relative text-gray-500 dark:text-gray-400 text-lg leading-relaxed max-w-md mx-auto">
+            <p className="relative fade-up fade-up-3 text-gray-500 dark:text-gray-400 text-lg leading-relaxed max-w-md mx-auto">
               Type or upload any math problem and get a beautiful step-by-step animated video that shows you exactly how to solve it.
             </p>
           </div>
@@ -327,11 +330,11 @@ export default function Home() {
 
         {/* ── Input Card ── */}
         {status !== "done" && (
-          <div className="relative w-full max-w-xl">
+          <div className="relative w-full max-w-xl fade-up fade-up-4">
             {/* Card glow */}
-            <div className="absolute -inset-1 bg-gradient-to-r from-indigo-600/20 via-violet-600/20 to-indigo-600/20 rounded-3xl blur-xl opacity-0 dark:opacity-100 pointer-events-none" />
+            <div className="absolute -inset-1.5 bg-gradient-to-r from-indigo-600/25 via-violet-600/20 to-indigo-600/25 rounded-3xl blur-2xl opacity-25 dark:opacity-80 pointer-events-none" />
 
-            <div className="card-sheen relative bg-white dark:bg-[rgba(255,255,255,0.028)] border border-gray-200 dark:border-white/[0.08] rounded-2xl p-6 flex flex-col gap-5 backdrop-blur-md">
+            <div className="card-sheen relative bg-white/95 dark:bg-[rgba(255,255,255,0.028)] border border-gray-200/80 dark:border-white/[0.09] rounded-2xl p-6 flex flex-col gap-5 backdrop-blur-xl">
 
               {/* Upload zone */}
               <div>
@@ -406,8 +409,8 @@ export default function Home() {
 
               {/* Voice selector */}
               <div className="flex flex-col gap-1.5">
-                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Narrator voice</p>
-                <div className="flex flex-wrap gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">Narrator voice</p>
+                <div className="flex flex-wrap gap-1.5">
                   {[
                     { id: "en-US-JennyNeural", label: "Jenny", gender: "F" },
                     { id: "en-US-GuyNeural",   label: "Guy",   gender: "M" },
@@ -419,13 +422,13 @@ export default function Home() {
                     <button
                       key={v.id}
                       onClick={() => setVoice(v.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                      className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-200 ${
                         voice === v.id
-                          ? "bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-500/30"
-                          : "bg-transparent border-gray-200 dark:border-white/[0.1] text-gray-600 dark:text-gray-400 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                          ? "bg-gradient-to-r from-indigo-600 to-violet-600 border-transparent text-white shadow-md shadow-indigo-500/25"
+                          : "bg-gray-50 dark:bg-white/[0.04] border-gray-200 dark:border-white/[0.08] text-gray-500 dark:text-gray-400 hover:border-indigo-400/60 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/[0.06]"
                       }`}
                     >
-                      {v.label} <span className="opacity-60 ml-0.5">{v.gender}</span>
+                      {v.label} <span className="opacity-50 ml-0.5 font-normal">{v.gender}</span>
                     </button>
                   ))}
                 </div>
@@ -435,12 +438,16 @@ export default function Home() {
               <button
                 onClick={() => handleSolve()}
                 disabled={!canSolve}
-                className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wide transition-all duration-200 ${
+                className={`cursor-pointer w-full py-3.5 rounded-xl font-bold text-sm tracking-wide transition-all duration-200 flex items-center justify-center gap-2 ${
                   canSolve
                     ? "glow-btn bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 bg-[length:200%_100%] hover:bg-right text-white hover:scale-[1.015] active:scale-[0.985]"
                     : "bg-gray-100 dark:bg-white/[0.04] text-gray-400 dark:text-gray-600 cursor-not-allowed"
                 }`}
               >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 Solve &amp; Animate
               </button>
             </div>
@@ -453,34 +460,64 @@ export default function Home() {
 
             {/* Processing */}
             {status === "processing" && (
-              <div className="card-sheen bg-white dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.07] rounded-2xl p-14 flex flex-col items-center gap-6 backdrop-blur-sm">
-                <div className="relative flex items-center justify-center">
-                  <div className="absolute w-20 h-20 rounded-full bg-indigo-500/10 dark:bg-indigo-500/15 blur-xl" />
-                  <div className="relative w-12 h-12">
-                    <div className="absolute inset-0 rounded-full border-2 border-indigo-500/15" />
-                    <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-indigo-500 animate-spin" />
-                    <div className="absolute inset-2 rounded-full border border-transparent border-t-violet-400 animate-spin" style={{animationDuration:'1.5s'}} />
+              <div className="card-sheen bg-white dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.07] rounded-2xl px-10 pt-8 pb-10 flex flex-col items-center gap-7 backdrop-blur-sm">
+                {/* Step progress */}
+                <div className="flex items-center gap-3 w-full max-w-xs">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-60" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500" />
+                    </span>
+                    <span className="text-xs font-semibold text-indigo-500">Analyzing</span>
+                  </div>
+                  <div className="flex-1 h-px step-line-todo" />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="h-2.5 w-2.5 rounded-full bg-gray-200 dark:bg-white/[0.1]" />
+                    <span className="text-xs font-medium text-gray-400 dark:text-gray-600">Rendering</span>
                   </div>
                 </div>
-                <div className="text-center space-y-1">
+                <div className="relative flex items-center justify-center">
+                  <div className="absolute w-24 h-24 rounded-full bg-indigo-500/10 dark:bg-indigo-500/15 blur-2xl" />
+                  <div className="relative w-14 h-14">
+                    <div className="absolute inset-0 rounded-full border-2 border-indigo-500/15" />
+                    <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-indigo-500 animate-spin" />
+                    <div className="absolute inset-2.5 rounded-full border border-transparent border-t-violet-400 animate-spin" style={{animationDuration:'1.5s'}} />
+                  </div>
+                </div>
+                <div className="text-center space-y-1.5">
                   <p className="font-semibold text-gray-900 dark:text-white">Analyzing problem…</p>
-                  <p className="text-sm text-gray-400 dark:text-gray-500">The AI is reading your problem and writing the animation</p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500">The AI is reading your problem and generating animation code</p>
                 </div>
               </div>
             )}
 
             {/* Rendering */}
             {status === "rendering" && (
-              <div className="card-sheen bg-white dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.07] rounded-2xl p-14 flex flex-col items-center gap-6 backdrop-blur-sm">
-                <div className="relative flex items-center justify-center">
-                  <div className="absolute w-20 h-20 rounded-full bg-violet-500/10 dark:bg-violet-500/15 blur-xl" />
-                  <div className="relative w-12 h-12">
-                    <div className="absolute inset-0 rounded-full border-2 border-violet-500/15" />
-                    <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-violet-500 animate-spin" />
-                    <div className="absolute inset-2 rounded-full border border-transparent border-t-pink-400 animate-spin" style={{animationDuration:'1.5s'}} />
+              <div className="card-sheen bg-white dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.07] rounded-2xl px-10 pt-8 pb-10 flex flex-col items-center gap-7 backdrop-blur-sm">
+                {/* Step progress */}
+                <div className="flex items-center gap-3 w-full max-w-xs">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="h-2.5 w-2.5 rounded-full bg-indigo-400/50" />
+                    <span className="text-xs font-medium text-gray-400 dark:text-gray-600 line-through decoration-indigo-400">Analyzing</span>
+                  </div>
+                  <div className="flex-1 h-px step-line-done" />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-60" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-500" />
+                    </span>
+                    <span className="text-xs font-semibold text-violet-500">Rendering</span>
                   </div>
                 </div>
-                <div className="text-center space-y-1">
+                <div className="relative flex items-center justify-center">
+                  <div className="absolute w-24 h-24 rounded-full bg-violet-500/10 dark:bg-violet-500/15 blur-2xl" />
+                  <div className="relative w-14 h-14">
+                    <div className="absolute inset-0 rounded-full border-2 border-violet-500/15" />
+                    <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-violet-500 animate-spin" />
+                    <div className="absolute inset-2.5 rounded-full border border-transparent border-t-pink-400 animate-spin" style={{animationDuration:'1.5s'}} />
+                  </div>
+                </div>
+                <div className="text-center space-y-1.5">
                   <p className="font-semibold text-gray-900 dark:text-white">Rendering animation…</p>
                   <p className="text-sm text-gray-400 dark:text-gray-500">Manim is generating your step-by-step video</p>
                 </div>
@@ -650,26 +687,31 @@ export default function Home() {
         <div className="w-full max-w-4xl mt-8">
           <div className="text-center mb-12">
             <p className="text-[11px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-3">The Process</p>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">How it works</h2>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">How it works</h2>
+            <p className="mt-3 text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">Three steps from problem to animated solution</p>
           </div>
           <div className="grid sm:grid-cols-3 gap-5 relative">
-            <div className="hidden sm:block absolute top-9 left-[calc(33.33%+24px)] right-[calc(33.33%+24px)] h-px">
-              <div className="h-full bg-gradient-to-r from-indigo-400/30 via-violet-400/30 to-emerald-400/30" />
+            {/* Connector line */}
+            <div className="hidden sm:flex absolute top-[2.6rem] left-[calc(33.33%+28px)] right-[calc(33.33%+28px)] items-center">
+              <div className="flex-1 h-px bg-gradient-to-r from-indigo-400/40 via-violet-400/40 to-emerald-400/40" />
             </div>
             {[
-              { icon: <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>, from: "from-blue-500", to: "to-indigo-600", glow: "group-hover:shadow-indigo-500/30", title: "Upload or Type",   desc: "Submit a photo, PDF, or type your math problem. Algebra, calculus, geometry — anything." },
-              { icon: <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>, from: "from-violet-500", to: "to-purple-600", glow: "group-hover:shadow-violet-500/30", title: "AI Figures It Out", desc: "GPT-4 Vision analyzes your problem and generates a personalized Manim animation." },
-              { icon: <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, from: "from-emerald-500", to: "to-teal-600", glow: "group-hover:shadow-emerald-500/30", title: "Watch & Learn",    desc: "A smooth animated video walks through every step with a written breakdown too." },
+              { icon: <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>, from: "from-blue-500", to: "to-indigo-600", glow: "group-hover:shadow-indigo-500/20", title: "Upload or Type",   desc: "Submit a photo, PDF, or type your math problem. Algebra, calculus, geometry — anything." },
+              { icon: <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>, from: "from-violet-500", to: "to-purple-600", glow: "group-hover:shadow-violet-500/20", title: "AI Figures It Out", desc: "GPT-4 Vision analyzes your problem and generates a personalized Manim animation." },
+              { icon: <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, from: "from-emerald-500", to: "to-teal-600", glow: "group-hover:shadow-emerald-500/20", title: "Watch & Learn",    desc: "A smooth animated video walks through every step with a written breakdown too." },
             ].map(({ icon, from, to, glow, title, desc }, i) => (
-              <div key={i} className={`group card-sheen grad-border relative bg-white dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.07] rounded-2xl p-6 flex flex-col gap-4 hover:shadow-xl ${glow} transition-all duration-300 hover:-translate-y-1 backdrop-blur-sm`}>
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${from} ${to} flex items-center justify-center text-white shadow-lg`}>
+              <div key={i} className={`group cursor-pointer card-sheen grad-border relative bg-white dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.07] rounded-2xl p-6 flex flex-col gap-4 hover:shadow-xl ${glow} transition-all duration-300 hover:-translate-y-1.5 backdrop-blur-sm overflow-hidden`}>
+                {/* Watermark number */}
+                <span className="absolute -bottom-2 right-3 text-8xl font-black text-gray-100 dark:text-white/[0.035] tabular-nums select-none leading-none pointer-events-none">
+                  0{i+1}
+                </span>
+                <div className={`relative w-11 h-11 rounded-xl bg-gradient-to-br ${from} ${to} flex items-center justify-center text-white shadow-lg shadow-current/20`}>
                   {icon}
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1.5">{title}</h3>
+                <div className="relative">
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1.5 tracking-tight">{title}</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
                 </div>
-                <span className="absolute top-5 right-5 text-xs font-bold text-gray-200 dark:text-white/[0.05] tabular-nums select-none">0{i+1}</span>
               </div>
             ))}
           </div>

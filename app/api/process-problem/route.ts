@@ -410,8 +410,8 @@ Adapt the steps list to match the actual problem. Always show the operation appl
       let errorData; //Initialize errorData to null
       try {
         errorData = JSON.parse(errorText); //Try to parse the error text as JSON
-      } catch (e) {
-        errorData = { error: errorText }; //If it fails, set errorData to the error text
+      } catch {
+        errorData = { error: errorText };
       }
       
       // Check for specific error types

@@ -15,7 +15,7 @@
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-dm-sans), var(--font-geist-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -48,7 +48,6 @@ body {
   background-clip: text;
   animation: text-shimmer 6s linear infinite;
 }
-/* Light-mode version */
 .shimmer-text-light {
   background: linear-gradient(
     90deg,
@@ -90,23 +89,35 @@ body {
 
 /* ── Glow pulse on CTA button ── */
 @keyframes glow-pulse {
-  0%,100% { box-shadow: 0 0 18px rgba(99,102,241,0.35), 0 4px 24px rgba(124,58,237,0.2); }
-  50%      { box-shadow: 0 0 32px rgba(99,102,241,0.55), 0 4px 40px rgba(124,58,237,0.35); }
+  0%,100% { box-shadow: 0 0 18px rgba(99,102,241,0.4), 0 4px 24px rgba(124,58,237,0.25); }
+  50%      { box-shadow: 0 0 36px rgba(99,102,241,0.65), 0 4px 48px rgba(124,58,237,0.4); }
 }
 .glow-btn { animation: glow-pulse 3s ease-in-out infinite; }
 
 /* ── Dot grid ── */
 .dot-grid {
-  background-image: radial-gradient(rgba(255,255,255,0.055) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(99,102,241,0.18) 1px, transparent 1px);
   background-size: 28px 28px;
 }
-
-/* ── Card inner-light sheen ── */
-.card-sheen {
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 3px rgba(0,0,0,0.4);
+.dark .dot-grid {
+  background-image: radial-gradient(rgba(255,255,255,0.055) 1px, transparent 1px);
 }
 
-/* ── Gradient border ring on hover ── */
+/* ── Card inner-light sheen — mode-aware ── */
+.card-sheen {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.85),
+    0 2px 12px rgba(0,0,0,0.06),
+    0 1px 3px rgba(0,0,0,0.04);
+}
+.dark .card-sheen {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.07),
+    0 4px 40px rgba(0,0,0,0.55),
+    0 1px 3px rgba(0,0,0,0.4);
+}
+
+/* ── Gradient border ring ── */
 .grad-border {
   position: relative;
   isolation: isolate;
@@ -117,15 +128,15 @@ body {
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, rgba(99,102,241,0), rgba(124,58,237,0));
+  background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(124,58,237,0.12));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  transition: background 0.3s;
+  transition: background 0.35s ease;
   pointer-events: none;
 }
 .grad-border:hover::before {
-  background: linear-gradient(135deg, rgba(99,102,241,0.6), rgba(124,58,237,0.6));
+  background: linear-gradient(135deg, rgba(99,102,241,0.65), rgba(124,58,237,0.65));
 }
 
 /* ── Floating math symbols ── */
@@ -135,4 +146,43 @@ body {
 }
 .math-sym {
   animation: sym-float var(--dur, 8s) ease-in-out infinite var(--delay, 0s);
+}
+
+/* ── Fade-up entrance animation ── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.fade-up-1 { animation-delay: 0.04s; }
+.fade-up-2 { animation-delay: 0.13s; }
+.fade-up-3 { animation-delay: 0.22s; }
+.fade-up-4 { animation-delay: 0.32s; }
+
+/* ── Step progress connector ── */
+.step-line-done {
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+}
+.step-line-todo {
+  background: linear-gradient(90deg, rgba(99,102,241,0.3), rgba(229,231,235,0.5));
+}
+.dark .step-line-todo {
+  background: linear-gradient(90deg, rgba(99,102,241,0.3), rgba(255,255,255,0.08));
+}
+
+/* ── Prefers reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .fade-up,
+  .shimmer-text,
+  .shimmer-text-light,
+  .math-sym,
+  .blob1,
+  .blob2,
+  .blob3,
+  .glow-btn {
+    animation: none !important;
+    opacity: 1 !important;
+  }
 }
