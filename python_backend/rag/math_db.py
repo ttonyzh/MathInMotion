@@ -14,13 +14,23 @@ from pathlib import Path
 
 DB_PATH = str(Path(__file__).parent / "chroma_db")
 
+# Cached at module level - a fresh PersistentClient reopens the SQLite file,
+# reloads the vector index, and re-instantiates ChromaDB's embedding model
+# (~80MB ONNX model) from scratch. Creating one per request (as this used to)
+# churns that much memory on every single /rag-context call, which is a
+# plausible contributor to OOM restarts on a memory-constrained instance.
+_collection = None
+
 
 def get_collection():
-    client = chromadb.PersistentClient(path=DB_PATH)
-    return client.get_or_create_collection(
-        name="math_knowledge",
-        metadata={"hnsw:space": "cosine"},
-    )
+    global _collection
+    if _collection is None:
+        client = chromadb.PersistentClient(path=DB_PATH)
+        _collection = client.get_or_create_collection(
+            name="math_knowledge",
+            metadata={"hnsw:space": "cosine"},
+        )
+    return _collection
 
 
 # Cosine distance cutoff (0 = identical, 2 = unrelated) above which a chunk is
