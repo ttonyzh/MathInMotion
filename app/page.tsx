@@ -14,7 +14,7 @@ interface HistoryEntry {
 function parseSolutionSteps(text: string): string[] {
   const byNewline = text.split('\n').map(s => s.trim()).filter(Boolean);
   if (byNewline.length > 1) return byNewline;
-  const bySentence = text.match(/[^.!?]+[.!?]+/g);
+  const bySentence = text.match(/[^.!?]*(?:\.\d+[^.!?]*)*[.!?]+/g);
   if (bySentence && bySentence.length > 1) return bySentence.map(s => s.trim()).filter(Boolean);
   return [text];
 }
@@ -51,7 +51,7 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [solutionText, setSolutionText] = useState<string | null>(null);
   const [showSolution, setShowSolution] = useState(true);
-  const [citations, setCitations] = useState<{source: string; chapter: string}[]>([]);
+  const [citations, setCitations] = useState<{source: string; chapter: string; url?: string}[]>([]);
   const [practiceProblems, setPracticeProblems] = useState<string[]>([]);
   const [isLoadingPractice, setIsLoadingPractice] = useState(false);
   const [showPractice, setShowPractice] = useState(false);
@@ -590,14 +590,31 @@ export default function Home() {
             {status === "done" && citations.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">Sources</span>
-                {citations.map((c, i) => (
-                  <span key={i} className="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-500/[0.08] border border-indigo-100 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-medium px-3 py-1 rounded-full">
+                {citations.map((c, i) => {
+                  const pillClass = "inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-500/[0.08] border border-indigo-100 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-medium px-3 py-1 rounded-full";
+                  const icon = (
                     <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                     </svg>
-                    {c.source} · {c.chapter}
-                  </span>
-                ))}
+                  );
+                  return c.url ? (
+                    <a
+                      key={i}
+                      href={c.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`${pillClass} hover:bg-indigo-100 dark:hover:bg-indigo-500/[0.16] transition-colors`}
+                    >
+                      {icon}
+                      {c.source} · {c.chapter}
+                    </a>
+                  ) : (
+                    <span key={i} className={pillClass}>
+                      {icon}
+                      {c.source} · {c.chapter}
+                    </span>
+                  );
+                })}
               </div>
             )}
 

@@ -11,6 +11,7 @@ export const maxDuration = 120;
 interface Citation {
   source: string;
   chapter: string;
+  url?: string;
 }
 
 interface ProcessResponse {
@@ -37,11 +38,11 @@ async function fetchRAGContext(query: string): Promise<{ context: string; citati
     });
     if (!res.ok) return { context: '', citations: [] };
     const data = await res.json();
-    const chunks: { text: string; source: string; chapter: string }[] = data.chunks || [];
+    const chunks: { text: string; source: string; chapter: string; url?: string }[] = data.chunks || [];
     const context = chunks
       .map(c => `${c.text}\n(Source: ${c.source}, ${c.chapter})`)
       .join('\n---\n');
-    const citations: Citation[] = chunks.map(c => ({ source: c.source, chapter: c.chapter }));
+    const citations: Citation[] = chunks.map(c => ({ source: c.source, chapter: c.chapter, url: c.url }));
     return { context, citations };
   } catch {
     return { context: '', citations: [] };
@@ -60,6 +61,70 @@ const ALLOWED_FILE_TYPES = [
 ];
 
 // Azure OpenAI integration
+// Lightweight OCR-only pass used when an image/PDF is uploaded with no typed
+// problem text. RAG retrieval needs real problem text to ground on — without
+// this, it would query a meaningless placeholder string and return irrelevant
+// citations (e.g. geometry chunks for a logarithm problem). This is separate
+// from the main solve call, which does its own full OCR+reasoning afterward.
+async function extractProblemTextFromImage(imageBuffer: Buffer, mimeType: string): Promise<string> {
+  try {
+    const apiKey = process.env.AZURE_OPENAI_API_KEY;
+    const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+    const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
+    const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2023-05-15';
+
+    if (!apiKey || !endpoint || !deploymentName) return '';
+
+    const url = `${endpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=${apiVersion}`;
+    const base64Image = imageBuffer.toString('base64');
+
+    const payload = {
+      messages: [
+        {
+          role: 'system',
+          content: 'Read the STEM/math problem shown in this image and output ONLY the problem text itself — no commentary, no explanation, no formatting. If there is no readable problem, output nothing.',
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Image}` } },
+          ],
+        },
+      ],
+      // Reasoning models can silently consume the whole budget on hidden
+      // reasoning tokens before producing visible output if this is too low,
+      // which sometimes returns an empty completion. 600 leaves real headroom.
+      max_completion_tokens: 600,
+    };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!response.ok) {
+      console.error('[extractProblemTextFromImage] non-ok response:', response.status, await response.text());
+      return '';
+    }
+    const data = await response.json();
+    const text: string = data.choices?.[0]?.message?.content?.trim() || '';
+    return text;
+  } catch (err) {
+    console.error('[extractProblemTextFromImage] threw:', err);
+    return '';
+  }
+}
+
 async function processWithAzureOpenAI(text: string, imageBuffer?: Buffer, mimeType?: string, ragContext?: string) {
   try {
     // Extract environment variables
@@ -125,6 +190,7 @@ CRITICAL ANIMATION RULES — follow these exactly:
   - x^2  → "x²"      x^3  → "x³"      x^4  → "x⁴"      x^5  → "x⁵"
   - x^6  → "x⁶"      x^7  → "x⁷"      x^8  → "x⁸"      x^9  → "x⁹"
   - (x+1)^2 → "(x+1)²"    2^n → "2ⁿ"    10^3 → "10³"
+- NEVER use "exp(...)" function notation (e.g. "exp(x/6)") — this is confusing for students who haven't seen that notation. Always write it as "e" raised to a power instead. If the exponent is a single digit, use a Unicode superscript (e² , e⁻¹). If the exponent is a longer expression (like "x/6" or "2x + 1") that can't be written as Unicode superscripts, use the make_exp class method (see Exponentials section below) to render it as a real visual superscript — do NOT fall back to "exp(...)" or a caret.
 - Use √ for square root (not "sqrt()").
 - Use π for pi (not "pi").
 - Use × for multiplication in operation lines (not "*").
@@ -156,6 +222,21 @@ steps = [
 \`\`\`
 - The required loop (below) handles both tuples and bare Mobjects automatically.
 - For the final answer line, if it is a plain equation (e.g. "f'(x) = 3x²"), use normal Text() — only use make_frac when a visible stacked fraction is needed.
+
+**Exponentials — e raised to a multi-character power (e.g. e^(x/6), e^(2x+1))**:
+- NEVER write these using "exp(...)" notation or a caret. Use the make_exp class method (already included in the Required pattern below) to render the exponent as a real raised superscript next to the base.
+- make_exp is defined as a method on the Scene class, alongside make_frac and make_lim.
+- Build the VGroup step before the steps list, exactly like a make_frac step, and place the finished VGroup directly into the list — NOT as a tuple.
+\`\`\`python
+# e^(x/6) as a real superscript, not "exp(x/6)"
+exp_step = self.make_exp("e", "x/6", font_size, WHITE)
+# To build a full equation around it, e.g. "x² + 1 = e^(x/6)":
+lhs = Text("x² + 1 = ", font_size=font_size, color=WHITE)
+exp_part = self.make_exp("e", "x/6", font_size, WHITE)
+exp_part.next_to(lhs, RIGHT, buff=0.05)
+full_step = VGroup(lhs, exp_part)
+\`\`\`
+- Put the finished VGroup into steps as a bare Mobject (same pattern as make_frac and make_lim steps).
 
 **Colors**:
 - Use WHITE for all intermediate steps.
@@ -264,6 +345,7 @@ step = VGroup(lim_grp, rest)
   - Never say "open parenthesis" or "close parenthesis" — just omit them. "(4x + 2)" → "4x plus 2"
   - "÷" or "/" in an expression → "divided by". Never say "numerator" or "denominator" for ÷ or / expressions — those words are only for stacked fractions (make_frac steps).
   - "lim x→2" → "the limit as x approaches 2"
+  - "e^(x/6)" or any make_exp step → "e to the power of x over 6" (spell out the exponent in words, never say "exp")
 - Keep each narration short — one sentence per step, under 15 words.
 - Example:
   ("2x + 5 = 4", WHITE),  # tts: We start with the equation 2x plus 5 equals 4
@@ -292,6 +374,12 @@ class SolveEquation(MovingCameraScene):
         sub.next_to(lim, DOWN, buff=0.04)
         sub.align_to(lim, LEFT)
         return VGroup(lim, sub)
+
+    def make_exp(self, base_str, exp_str, fs, color):
+        base = Text(base_str, font_size=fs, color=color)
+        exponent = Text(exp_str, font_size=int(fs * 0.6), color=color)
+        exponent.next_to(base, UR, buff=0.02).shift(LEFT * exponent.width * 0.3)
+        return VGroup(base, exponent)
 
     def construct(self):
         # Steps list: each entry is either a ("text", COLOR) tuple or a pre-built Mobject.
@@ -580,7 +668,15 @@ async function validateAndProcessRequest(request: NextRequest): Promise<ProcessR
         combinedText = `${fileContext}\n\n${problemText}`;
       }
 
-      const { context, citations } = await fetchRAGContext(problemText?.trim() || 'math problem from image');
+      // RAG needs real problem text to ground on. If the user typed something,
+      // use that directly; otherwise run a fast OCR-only pass over the image
+      // first so retrieval isn't querying a meaningless placeholder.
+      let ragQuery = problemText?.trim() || '';
+      if (!ragQuery) {
+        ragQuery = await extractProblemTextFromImage(buffer, file.type);
+      }
+
+      const { context, citations } = await fetchRAGContext(ragQuery);
       const result = await processWithAzureOpenAI(combinedText, buffer, file.type, context);
       return { ...result, citations };
 
