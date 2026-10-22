@@ -65,6 +65,17 @@ AZURE_SPEECH_REGION=eastus
 
 > Replace `eastus` with whichever Azure region your Speech resource is in.
 
+### 5. Seed the RAG knowledge base
+
+The vector database isn't committed to the repo (it's regenerated from source, not hand-maintained). Run these once from `python_backend/rag/`:
+
+```bash
+python ingest_pauls_notes.py
+python ingest_openstax.py
+```
+
+This scrapes real content from Paul's Online Math Notes and OpenStax textbooks and loads it into a local ChromaDB store at `python_backend/rag/chroma_db/`. Takes a minute or two; both scripts are safe to re-run (they skip anything already ingested).
+
 ## Running the App
 
 You need two terminals running simultaneously:
