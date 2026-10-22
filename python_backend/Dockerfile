@@ -22,5 +22,12 @@ RUN pip install --no-cache-dir -r python_backend/requirements.txt
 
 COPY python_backend/ ./python_backend/
 
+# chroma_db is git-ignored (regenerated, not hand-maintained - see
+# python_backend/rag/math_db.py), so it never exists in a fresh clone.
+# Run the scrapers here so the real knowledge base gets baked into this
+# build's image layer instead of depending on whatever happens to be on
+# the machine that ran `docker build`.
+RUN cd python_backend/rag && python ingest_pauls_notes.py && python ingest_openstax.py
+
 EXPOSE 5005
 CMD ["python", "-m", "python_backend.direct_manim_server"]
