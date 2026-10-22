@@ -43,6 +43,9 @@ next-env.d.ts
 # Uploaded files (temporary, user-generated)
 /public/uploads/
 
+# RAG vector database (regenerate with python_backend/rag/ingest_*.py)
+python_backend/rag/chroma_db/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -54,3 +57,4 @@ python_backend/media/
 python_backend.log
 nextjs.log
 venv311/
+.claude/
