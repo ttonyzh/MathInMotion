@@ -12,9 +12,9 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger('docker_manim_renderer')
+logger = logging.getLogger('manim_renderer')
 
-class DockerManimRenderer:
+class ManimRenderer:
     def __init__(self, host_media_dir):
         self.host_media_dir = Path(host_media_dir).resolve()
         self.host_media_dir.mkdir(parents=True, exist_ok=True)

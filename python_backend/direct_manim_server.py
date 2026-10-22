@@ -5,10 +5,10 @@ import sys
 import logging
 import subprocess
 import base64
-from .docker_manim_renderer import DockerManimRenderer
+from .manim_renderer import ManimRenderer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from rag.math_db import retrieve, seed_database
+from rag.math_db import retrieve
 
 # Configure logging
 logging.basicConfig(
@@ -33,14 +33,11 @@ CORS(app, resources={
 MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'media')
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
-# Initialize the Docker-based Manim renderer
-manim_renderer = DockerManimRenderer(MEDIA_DIR)
+# Initialize the Manim renderer (runs Manim as a local subprocess)
+manim_renderer = ManimRenderer(MEDIA_DIR)
 
-# Seed the RAG database on startup (no-op if already seeded)
-try:
-    seed_database()
-except Exception as e:
-    logger.warning(f"RAG seed failed (non-fatal): {e}")
+# RAG knowledge base is populated by running rag/ingest_pauls_notes.py and
+# rag/ingest_openstax.py once (not re-seeded on every server start).
 
 
 @app.route('/rag-context', methods=['POST'])
