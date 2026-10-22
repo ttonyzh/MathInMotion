@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { mkdir, writeFile } from 'fs/promises';
-import { join } from 'path';
-import { v4 as uuidv4 } from 'uuid';
 
 // Allow this route up to 120 seconds (reasoning models can be slow)
 export const maxDuration = 120;
@@ -30,7 +27,8 @@ interface ProcessResponse {
 
 async function fetchRAGContext(query: string): Promise<{ context: string; citations: Citation[] }> {
   try {
-    const res = await fetch('http://localhost:5005/rag-context', {
+    const backendUrl = process.env.PYTHON_BACKEND_URL || 'http://localhost:5005';
+    const res = await fetch(`${backendUrl}/rag-context`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
@@ -50,7 +48,6 @@ async function fetchRAGContext(query: string): Promise<{ context: string; citati
 }
 
 // Constants
-const UPLOAD_DIR = 'public/uploads';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_FILE_TYPES = [
   'image/jpeg',
@@ -654,14 +651,6 @@ async function validateAndProcessRequest(request: NextRequest): Promise<ProcessR
     const buffer: Buffer = Buffer.from(bytes);
 
     try {
-      const uploadDir: string = join(process.cwd(), UPLOAD_DIR);
-      await mkdir(uploadDir, { recursive: true });
-
-      const uniqueId: string = uuidv4();
-      const filename: string = `${uniqueId}-${file.name.replace(/[^\w.]+/g, '-')}`;
-      const filepath: string = join(uploadDir, filename);
-      await writeFile(filepath, buffer);
-
       const fileContext: string = `This is a ${file.type} file containing a STEM problem that needs to be solved and visualized.`;
       let combinedText: string = fileContext;
       if (problemText?.trim()) {

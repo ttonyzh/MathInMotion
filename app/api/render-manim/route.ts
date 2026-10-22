@@ -15,7 +15,7 @@ interface RenderResponse { //the response of the AI
 }
 
 const RENDER_TIMEOUT_MS = 60000; // 60 seconds
-const BACKEND_URL = 'http://localhost:5005/render-manim';
+const BACKEND_URL = `${process.env.PYTHON_BACKEND_URL || 'http://localhost:5005'}/render-manim`;
 
 export async function POST(request: NextRequest) {
   let controller: AbortController | null = null;

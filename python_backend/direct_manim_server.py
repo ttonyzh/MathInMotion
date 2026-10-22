@@ -18,11 +18,18 @@ logging.basicConfig(
 logger = logging.getLogger('direct_manim_server')
 
 app = Flask(__name__)
-# Configure CORS to allow requests from the Next.js development server
+# Allowed origins: local dev defaults, plus whatever's set in FRONTEND_URL for
+# production (e.g. https://your-app.vercel.app). Browsers never actually call
+# this server directly in the current architecture (Next.js proxies server-side),
+# so this mainly matters if /health or /media is ever hit directly from a browser.
+_allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000",
+                     "http://localhost:3001", "http://127.0.0.1:3001"]
+if os.environ.get("FRONTEND_URL"):
+    _allowed_origins.append(os.environ["FRONTEND_URL"])
+
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3000", "http://127.0.0.1:3000",
-                    "http://localhost:3001", "http://127.0.0.1:3001"],
+        "origins": _allowed_origins,
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True
@@ -144,29 +151,33 @@ def serve_media(filename):
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint that verifies Docker is available."""
+    """Health check endpoint. Verifies ffmpeg is on PATH (required to encode
+    rendered video) and that Manim actually imports - the two real
+    dependencies this service needs to function. Rendering never shells out
+    to Docker, so checking for a `docker` binary (as this endpoint used to)
+    was checking something irrelevant to whether this service can work."""
     try:
-        # Check if Docker is running and accessible
-        result = subprocess.run(
-            ['docker', 'info'],
+        ffmpeg_result = subprocess.run(
+            ['ffmpeg', '-version'],
             capture_output=True,
             text=True
         )
-        
-        if result.returncode != 0:
+        if ffmpeg_result.returncode != 0:
             response = jsonify({
                 'status': 'unhealthy',
-                'error': 'Docker is not running or accessible',
-                'details': result.stderr
+                'error': 'ffmpeg is not available',
+                'details': ffmpeg_result.stderr
             })
             response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
             response.headers.add('Access-Control-Allow-Credentials', 'true')
             response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
             return response, 500
-            
+
+        import manim  # noqa: F401 - import itself is the check
+
         response = jsonify({
             'status': 'healthy',
-            'docker': 'available',
+            'ffmpeg': 'available',
             'manim': 'ready'
         })
         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
