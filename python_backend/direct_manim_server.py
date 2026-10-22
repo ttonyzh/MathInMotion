@@ -197,4 +197,7 @@ def health_check():
 if __name__ == '__main__':
     logger.info("Starting Direct Manim Server")
     # Disable debug mode to prevent auto-reload during rendering
-    app.run(host='0.0.0.0', port=5005, debug=False)
+    # Render (and most hosts) assign the port via $PORT at runtime rather
+    # than letting the app pick one; 5005 stays the default for local dev.
+    port = int(os.environ.get('PORT', 5005))
+    app.run(host='0.0.0.0', port=port, debug=False)
