@@ -99,3 +99,17 @@ Then open http://localhost:3000 in your browser.
 3. The app calls Azure OpenAI to generate a solution and Manim animation code
 4. The Flask server renders the animation into an MP4 video
 5. Watch the step-by-step animated explanation in the browser
+
+## Deployment
+
+The frontend (Next.js) and backend (Flask + Manim) deploy as two separate services.
+
+**Backend** — `python_backend/Dockerfile` builds a container with Cairo, Pango, and ffmpeg (Manim's actual runtime dependencies). Build with the repo root as context:
+```bash
+docker build -f python_backend/Dockerfile -t mathinmotion-backend .
+```
+Deploy that image to any host with persistent compute (Railway, Render, Fly.io, a VM) — not a serverless platform, since Manim needs a real filesystem and CPU time to render. Set `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, and `FRONTEND_URL` (your deployed frontend's origin, for CORS) as environment variables on the host.
+
+**Frontend** — deploys normally to Vercel. Set `AZURE_OPENAI_*` env vars plus `PYTHON_BACKEND_URL` (your deployed backend's base URL, e.g. `https://your-backend.up.railway.app`) in the Vercel project settings.
+
+**RAG knowledge base** — baked into the backend's Docker image at build time (see "Seed the RAG knowledge base" above, which must be run locally before building the image). No persistent volume needed; re-run the ingest scripts and rebuild/redeploy to update it.
