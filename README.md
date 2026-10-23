@@ -1,6 +1,10 @@
 # MathInMotion - Visual STEM Problem Solver
 
+**Live: [mathinmotion.vercel.app](https://mathinmotion.vercel.app)**
+
 MathInMotion helps students understand and solve STEM problems through animated visual explanations. Upload an image/PDF or type a problem, and the app generates a step-by-step animated video using Manim.
+
+https://github.com/user-attachments/assets/009bf89d-4c66-4aed-9fd8-230f55d651a4
 
 ## Tech Stack
 
@@ -29,8 +33,8 @@ Install the following before getting started:
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/ttonyzh/tutor_AI
-cd tutor_AI
+git clone https://github.com/ttonyzh/MathInMotion
+cd MathInMotion
 ```
 
 ### 2. Install frontend dependencies
@@ -104,12 +108,17 @@ Then open http://localhost:3000 in your browser.
 
 The frontend (Next.js) and backend (Flask + Manim) deploy as two separate services.
 
-**Backend** — `python_backend/Dockerfile` builds a container with Cairo, Pango, and ffmpeg (Manim's actual runtime dependencies). Build with the repo root as context:
+**Backend** — `python_backend/Dockerfile` builds a container with Cairo, Pango, and ffmpeg (Manim's actual runtime dependencies), and runs the RAG ingest scripts as part of the build itself (so the image is self-contained — no local pre-build step needed, and it works from a clean CI/host checkout). Build with the repo root as context:
 ```bash
 docker build -f python_backend/Dockerfile -t mathinmotion-backend .
 ```
-Deploy that image to any host with persistent compute (Railway, Render, Fly.io, a VM) — not a serverless platform, since Manim needs a real filesystem and CPU time to render. Set `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, and `FRONTEND_URL` (your deployed frontend's origin, for CORS) as environment variables on the host.
+Deploy that image to any host with persistent compute (Render, Railway, Fly.io, a VM) — not a serverless platform, since Manim needs a real filesystem and CPU time to render. Set these environment variables on the host:
+- `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`
+- `FRONTEND_URL` — your deployed frontend's origin, for CORS
+- `PORT` — most hosts (Render included) assign this automatically; the server reads it instead of hardcoding a port
 
-**Frontend** — deploys normally to Vercel. Set `AZURE_OPENAI_*` env vars plus `PYTHON_BACKEND_URL` (your deployed backend's base URL, e.g. `https://your-backend.up.railway.app`) in the Vercel project settings.
+**Memory**: budget at least 2GB RAM for the backend instance. 512MB (e.g. Render's $7/mo tier) is enough for simple problems but can OOM-crash on more complex ones (multi-step derivatives, trig-heavy problems) — confirmed by actually deploying at that tier and reproducing the crash, not just estimating.
 
-**RAG knowledge base** — baked into the backend's Docker image at build time (see "Seed the RAG knowledge base" above, which must be run locally before building the image). No persistent volume needed; re-run the ingest scripts and rebuild/redeploy to update it.
+**Frontend** — deploys normally to Vercel. Set `AZURE_OPENAI_*` env vars plus `PYTHON_BACKEND_URL` (your deployed backend's base URL, e.g. `https://your-backend.onrender.com`) in the Vercel project settings.
+
+**RAG knowledge base** — scraped fresh from Paul's Online Math Notes and OpenStax during the Docker build (see above) — nothing to pre-run locally before deploying. To update the content, just rebuild and redeploy; no persistent volume is needed.
